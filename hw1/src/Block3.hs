@@ -119,7 +119,7 @@ modNat :: Nat -> Nat -> Nat
 modNat a b = a - divNat a b * b
 
 -- task 4
-data (Ord a) => Tree a
+data Tree a
   = Leaf
   | Node (NonEmpty a) (Tree a) (Tree a)
 
@@ -163,5 +163,5 @@ erase x (Node elems@(e :| es) left right)
             in case right of
                  Leaf                     -> left
                  Node rElems rLeft rRight -> let (newElems, newRight) = getMinElems rElems rLeft rRight
-                                            in Node newElems left newRight
+                                             in Node newElems left newRight
       h:t -> Node (h :| t) left right
