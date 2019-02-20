@@ -16,8 +16,8 @@ module Block3
   , erase
   ) where
 
-import Data.List
-import Data.List.NonEmpty (NonEmpty(..), (<|))
+import Data.List (foldl')
+import Data.List.NonEmpty (NonEmpty (..), (<|))
 import Data.Maybe ()
 
 -- task 1
@@ -58,7 +58,7 @@ nextDay Sunday = Monday
 nextDay day    = succ day
 
 afterDays :: Day -> Int -> Day
-afterDays day cnt = toEnum $ mod (cnt + fromEnum day) (1 + fromEnum Sunday)
+afterDays day cnt = toEnum $ (cnt + fromEnum day) `mod` (1 + fromEnum Sunday)
 
 isWeekend :: Day -> Bool
 isWeekend day =
@@ -68,7 +68,7 @@ isWeekend day =
     _        -> False
 
 daysToParty :: Day -> Int
-daysToParty day = fromEnum $ mod (fromEnum Friday - fromEnum day) (1 + fromEnum Sunday)
+daysToParty day = fromEnum $ (fromEnum Friday - fromEnum day) `mod` (1 + fromEnum Sunday)
 
 -- task 2
 
@@ -122,6 +122,7 @@ modNat a b = a - divNat a b * b
 data Tree a
   = Leaf
   | Node (NonEmpty a) (Tree a) (Tree a)
+  deriving (Show)
 
 empty :: Ord a => Tree a -> Bool
 empty Leaf = True
@@ -133,35 +134,37 @@ size (Node _ left right) = 1 + size left + size right
 
 contains :: Ord a => a -> Tree a -> Maybe (Tree a)
 contains _ Leaf = Nothing
-contains x node@(Node (e :| _) left right)
-  | x == e = Just node
-  | x < e  = contains x left
-  | x > e  = contains x right
+contains x node@(Node (e :| _) left right) =
+  case compare x e of
+    EQ -> Just node
+    LT -> contains x left
+    GT -> contains x right
 
 emplace :: Ord a => a -> Tree a -> Tree a
 emplace x Leaf = Node (x :| []) Leaf Leaf
-emplace x (Node elems@(e :| _) left right)
-  | x == e = Node (x <| elems) left right
-  | x < e  = Node elems (emplace x left) right
-  | x > e  = Node elems left (emplace x right)
+emplace x (Node elems@(e :| _) left right) =
+  case compare x e of
+    EQ -> Node (x <| elems) left right
+    LT -> Node elems (emplace x left) right
+    GT -> Node elems left (emplace x right)
 
 fromList :: Ord a => [a] -> Tree a
 fromList = foldl' (flip emplace) Leaf
 
 erase :: Ord a => a -> Tree a -> Tree a
 erase _ tree@Leaf = tree
-erase x (Node elems@(e :| es) left right)
-  | x < e  = Node elems (erase x left) right
-  | x > e  = Node elems left (erase x right)
-  | x == e =
-    case es of
-      [] -> let getMinElems curElems curLeft curRight =
-                  case curLeft of
-                    Leaf                     -> (curElems, curRight)
-                    Node lElems lLeft lRight -> let (recElems, recLeft) = getMinElems lElems lLeft lRight
-                                                in (recElems, Node curElems recLeft curRight)
-            in case right of
-                 Leaf                     -> left
-                 Node rElems rLeft rRight -> let (newElems, newRight) = getMinElems rElems rLeft rRight
-                                             in Node newElems left newRight
-      h:t -> Node (h :| t) left right
+erase x (Node elems@(e :| es) left right) =
+  case compare x e of
+    LT -> Node elems (erase x left) right
+    GT -> Node elems left (erase x right)
+    EQ -> case es of
+            h:t -> Node (h :| t) left right
+            [] -> case extractLeftestNode right of
+                    Nothing                   -> left
+                    Just (newElems, newRight) -> Node newElems left newRight
+  where
+    extractLeftestNode Leaf = Nothing
+    extractLeftestNode (Node smth l r) =
+      case extractLeftestNode l of
+        Nothing                    -> Just (smth, r)
+        Just (childElems, newLeft) -> Just (childElems, Node smth newLeft r)

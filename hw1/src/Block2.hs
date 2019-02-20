@@ -6,7 +6,7 @@ module Block2
 
 import Data.List (length)
 import Data.Maybe ()
-import Numeric.Natural
+import Numeric.Natural (Natural (..))
 
 removeAt :: [a] -> Natural -> (a, [a])
 removeAt []    _   = error "Index out of bound"
@@ -21,15 +21,16 @@ removeAtSafe (h:t) ind = let (e, l) = removeAtSafe t (ind - 1) in (e, h:l)
 mergeSort :: Ord a => [a] -> [a]
 mergeSort [] = []
 mergeSort [x] = [x]
-mergeSort (h:t) =
-  let split left leftSize right rightSize
-        | rightSize - leftSize <= 1 = (left, right)
-        | otherwise                 = split (head right:left) (leftSize + 1) (tail right) (rightSize - 1)
-  in let (left, right) = split [h] 1 t (length t)
+mergeSort a =
+  let (left, right) = split a
   in merge (mergeSort left) (mergeSort right)
   where
     merge [] xs = xs
     merge xs [] = xs
     merge l@(a:at) r@(b:bt)
-        | a <= b = a:merge at r
-        | otherwise = b:merge l bt
+      | a <= b = a:merge at r
+      | otherwise = b:merge l bt
+
+    split (x:y:xs) = let (left, right) = split xs in (x:left, y:right)
+    split xs@[_]   = (xs, [])
+    split []       = ([], [])
