@@ -4,9 +4,8 @@ module Block2
     , mergeSort
     ) where
 
-import Data.List (length)
 import Data.Maybe ()
-import Numeric.Natural (Natural (..))
+import Numeric.Natural (Natural)
 
 removeAt :: [a] -> Natural -> (a, [a])
 removeAt []    _   = error "Index out of bound"
@@ -27,9 +26,9 @@ mergeSort a =
   where
     merge [] xs = xs
     merge xs [] = xs
-    merge l@(a:at) r@(b:bt)
-      | a <= b = a:merge at r
-      | otherwise = b:merge l bt
+    merge l@(x:xs) r@(y:ys)
+      | x <= y = x:merge xs r
+      | otherwise = y:merge l ys
 
     split (x:y:xs) = let (left, right) = split xs in (x:left, y:right)
     split xs@[_]   = (xs, [])
