@@ -9,6 +9,7 @@ module Block4
 
 -- task1
 import Block3 (Tree (..))
+import Data.List (foldl')
 import Data.Monoid (mempty, (<>))
 
 data Pair a = Pair a a
@@ -43,14 +44,12 @@ instance Foldable Tree where
 e <| (x :| xs) = e :| (x:xs)
 
 splitOn :: Eq a => a -> [a] -> NonEmpty [a]
-splitOn delim s = innerSplit delim s []
+splitOn delim s = foldr folder ([] :| []) s
   where
-    innerSplit _ [] acc = reverse acc :| []
-    innerSplit d (x:xs) acc =
-      if x == d
-      then reverse acc <| innerSplit d xs []
-      else innerSplit d xs (x:acc)
+    folder c (x :| xs)
+      | c == delim = [] :| (x:xs)
+      | otherwise  = (c:x) :| xs
 
 joinWith :: a -> NonEmpty [a] -> [a]
-joinWith _ (x :| [])     = x
-joinWith d (e :| (x:xs)) = e ++ (d:joinWith d (x :| xs))
+joinWith _     (x :| []) = x
+joinWith delim (x :| xs) = foldl' (\a b -> a ++ (delim:b)) x xs
