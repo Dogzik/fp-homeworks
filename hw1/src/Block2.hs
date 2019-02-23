@@ -1,10 +1,9 @@
 module Block2
-    ( removeAt
+    ( mergeSort
+    , removeAt
     , removeAtSafe
-    , mergeSort
     ) where
 
-import Data.Maybe ()
 import Numeric.Natural (Natural)
 
 removeAt :: [a] -> Natural -> (a, [a])
@@ -21,13 +20,12 @@ mergeSort :: Ord a => [a] -> [a]
 mergeSort [] = []
 mergeSort [x] = [x]
 mergeSort a =
-  let (left, right) = split a
-  in merge (mergeSort left) (mergeSort right)
+  let (left, right) = split a in merge (mergeSort left) (mergeSort right)
   where
     merge [] xs = xs
     merge xs [] = xs
     merge l@(x:xs) r@(y:ys)
-      | x <= y = x:merge xs r
+      | x <= y    = x:merge xs r
       | otherwise = y:merge l ys
 
     split (x:y:xs) = let (left, right) = split xs in (x:left, y:right)

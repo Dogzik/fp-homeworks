@@ -1,24 +1,39 @@
 module Block3
-  ( nextDay
-  , afterDays
-  , isWeekend
-  , daysToParty
+  ( Building(..)
+  , Castle(..)
+  , City(..)
+  , FamilyError(..)
+  , House(..)
+  , Human(..)
+  , Lord(..)
+  , LordError(..)
   , Nat(..)
-  , isEvenNat
-  , divNat
-  , modNat
   , Tree(..)
-  , empty
-  , size
+  , Walls(..)
+  , WallsError(..)
+  , acceptFamily
+  , acceptLord
+  , afterDays
+  , buildBuiding
+  , buildCastle
+  , buildWalls
   , contains
+  , daysToParty
+  , divNat
   , emplace
-  , fromList
+  , empty
   , erase
+  , fromList
+  , isEvenNat
+  , isWeekend
+  , modNat
+  , nextDay
+  , size
   ) where
 
 import Data.List (foldl')
 import Data.List.NonEmpty (NonEmpty (..), (<|))
-import Data.Maybe ()
+import Data.Monoid (Sum (..), getSum)
 
 -- task 1
 data Day
@@ -51,7 +66,7 @@ instance Enum Day where
       4 -> Friday
       5 -> Saturday
       6 -> Sunday
-      _ -> error "Incorecnt input"
+      _ -> error "Incorect input"
 
 nextDay :: Day -> Day
 nextDay Sunday = Monday
@@ -71,8 +86,66 @@ daysToParty :: Day -> Int
 daysToParty day = fromEnum $ (fromEnum Friday - fromEnum day) `mod` (1 + fromEnum Sunday)
 
 -- task 2
+data Walls = Walls
+data Lord = Lord
+data Human = Human
+data House
+  = House1 Human
+  | House2 Human Human
+  | House3 Human Human Human
+  | House4 Human Human Human Human
+data Castle = Castle (Maybe Walls) (Maybe Lord)
+data Building = Church | Library
+data City = City
+  { castle   :: Maybe Castle
+  , building :: Maybe Building
+  , houses   :: NonEmpty House
+}
+data FamilyError = TooSmall | TooBig
+data LordError = NoCastle | AlreadyWasLord
+data WallsError = NeedCastle | NoLord | TooFewPeople | AlreadyWereWalls
 
+buildCastle :: City -> (City, Bool)
+buildCastle city@City { castle = Just _ }  = (city, False)
+buildCastle city@City { castle = Nothing } = (city { castle = Just $ Castle Nothing Nothing }, True)
 
+buildBuiding :: City -> Building -> (City, Bool)
+buildBuiding city@City { building = Just _ } _  = (city, False)
+buildBuiding city@City { building = Nothing } b = (city { building = Just b }, True)
+
+acceptFamily :: City -> [Human] -> (City, Maybe FamilyError)
+acceptFamily city@City { houses = x :| xs} family =
+  case family of
+    []           -> (city, Just TooSmall)
+    [a]          -> (city { houses = House1 a :| (x:xs) }, Nothing)
+    [a, b]       -> (city { houses = House2 a b :| (x:xs) }, Nothing)
+    [a, b, c]    -> (city { houses = House3 a b c :| (x:xs) }, Nothing)
+    [a, b, c, d] -> (city { houses = House4 a b c d :| (x:xs) }, Nothing)
+    _            -> (city, Just TooBig)
+
+acceptLord :: City -> (City, Maybe LordError)
+acceptLord city@City { castle = Nothing } = (city, Just NoCastle)
+acceptLord city@City { castle = Just (Castle _ (Just Lord)) } =
+  (city, Just AlreadyWasLord)
+acceptLord city@City { castle = Just (Castle walls Nothing) } =
+  (city { castle = Just (Castle walls (Just Lord)) }, Nothing)
+
+peopleCnt :: NonEmpty House -> Int
+peopleCnt xs = getSum $ foldMap mapper xs
+  where
+    mapper (House1 _)       = Sum 1
+    mapper (House2 _ _)     = Sum 2
+    mapper (House3 _ _ _)   = Sum 3
+    mapper (House4 _ _ _ _) = Sum 4
+
+buildWalls :: City -> (City, Maybe WallsError)
+buildWalls city@City { castle = Just (Castle (Just Walls) _) } = (city, Just AlreadyWereWalls)
+buildWalls city@City { castle = Nothing } = (city, Just NeedCastle)
+buildWalls city@City {castle = Just (Castle Nothing Nothing) } = (city, Just NoLord)
+buildWalls city@City {castle = Just (Castle Nothing (Just Lord)) } =
+  if peopleCnt (houses city) >= 10
+  then (city {castle = Just (Castle (Just Walls) (Just Lord)) }, Nothing)
+  else (city, Just TooFewPeople)
 
 -- task 3
 data Nat
@@ -83,14 +156,19 @@ data Nat
 instance Num Nat where
   a     + Z     = a
   a     + (S b) = S (a + b)
+
   _     * Z     = Z
   a     * (S b) = a + (a * b)
+
   a     - Z     = a
   Z     - _     = Z
   (S a) - (S b) = a - b
+
   fromInteger 0 = Z
   fromInteger x = S (fromInteger (x - 1))
+
   abs = id
+
   signum Z = 0
   signum _ = 1
 

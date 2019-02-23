@@ -1,16 +1,15 @@
 {-# LANGUAGE InstanceSigs #-}
 
 module Block4
-    ( Pair(..)
-    , NonEmpty(..)
-    , splitOn
+    ( NonEmpty(..)
+    , Pair(..)
     , joinWith
+    , splitOn
     ) where
 
 -- task1
 import Block3 (Tree (..))
 import Data.List (foldl')
-import Data.Monoid (mempty, (<>))
 
 data Pair a = Pair a a
 data NonEmpty a = a :| [a] deriving (Show)
@@ -39,10 +38,6 @@ instance Foldable Tree where
   foldMap f (Node es l r) = foldMap f l <> foldMap f es <> foldMap f r
 
 -- task2
-
-(<|) :: a -> NonEmpty a -> NonEmpty a
-e <| (x :| xs) = e :| (x:xs)
-
 splitOn :: Eq a => a -> [a] -> NonEmpty [a]
 splitOn delim s = foldr folder ([] :| []) s
   where
