@@ -105,7 +105,7 @@ data City = City
   { castle   :: Maybe Castle
   , building :: Maybe Building
   , houses   :: NonEmpty House
-} deriving (Show)
+}
 data FamilyError = TooSmall | TooBig
 data LordError = NoCastle | AlreadyWasLord
 data WallsError = NeedCastle | NoLord | TooFewPeople | AlreadyWereWalls

@@ -28,20 +28,20 @@ instance Semigroup (NonEmpty a) where
 data ThisOrThat a b = This a | That b | Both a b
 
 instance (Semigroup a, Semigroup b) => Semigroup (ThisOrThat a b) where
-  (This x)     <> (That y)   = Both x y
+  This x       <> That y     = Both x y
   l@(That _)   <> r@(This _) = r <> l
-  (Both x y)   <> (Both a b) = Both (x <> a) (y <> b)
-  (This x)     <> (This a)   = This (x <> a)
-  (That y)     <> (That b)   = That (y <> b)
-  (This x)     <> (Both a b) = Both (x <> a) b
+  Both x y     <> Both a b   = Both (x <> a) (y <> b)
+  This x       <> This a     = This (x <> a)
+  That y       <> That b     = That (y <> b)
+  This x       <> Both a b   = Both (x <> a) b
   l@(Both _ _) <> r@(This _) = r <> l
-  (That y)     <> (Both a b) = Both a (y <> b)
+  That y       <> Both a b   = Both a (y <> b)
   l@(Both _ _) <> r@(That _) = r <> l
 
 newtype Name = Name String deriving (Show, Eq)
 
 instance Semigroup Name where
-  (Name x) <> (Name y)
+  Name x <> Name y
     | x == ""   = Name y
     | y == ""   = Name x
     | otherwise = Name (x ++ "." ++ y)
@@ -61,12 +61,9 @@ instance Monoid (Endo a) where
 data Builder = One Char | Many [Builder] deriving (Show)
 
 instance Semigroup Builder where
-  l@(One _) <> (Many []) = l
-  (Many []) <> r@(One _) = r
-  l@(One _) <> r@(One _) = Many [l, r]
-  x@(One _) <> (Many xs) = Many (x:xs)
-  (Many xs) <> x@(One _) = Many (x:xs)
-  (Many xs) <> (Many ys) = Many (xs ++ ys)
+  l       <> Many [] = l
+  Many [] <> r       = r
+  l       <> r       = Many [l, r]
 
 instance Monoid Builder where
   mempty = Many []
