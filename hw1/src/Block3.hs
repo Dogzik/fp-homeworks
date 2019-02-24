@@ -105,7 +105,7 @@ data City = City
   { castle   :: Maybe Castle
   , building :: Maybe Building
   , houses   :: NonEmpty House
-}
+} deriving (Show)
 data FamilyError = TooSmall | TooBig
 data LordError = NoCastle | AlreadyWasLord
 data WallsError = NeedCastle | NoLord | TooFewPeople | AlreadyWereWalls
@@ -114,7 +114,7 @@ buildCastle :: City -> (City, Bool)
 buildCastle city =
   case castle city of
     Just _  -> (city, False)
-    Nothing -> (city { castle = Just $ Castle Nothing Nothing }, True)
+    Nothing -> (city { castle = Just (Castle Nothing Nothing) }, True)
 
 buildBuiding :: City -> Building -> (City, Bool)
 buildBuiding city b =

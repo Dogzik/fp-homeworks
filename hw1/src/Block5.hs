@@ -9,7 +9,6 @@ module Block5
   ) where
 
 import Block4 (NonEmpty (..))
-import Data.List (foldl')
 import Data.Maybe (catMaybes)
 
 -- task1
@@ -17,10 +16,10 @@ maybeConcat :: [Maybe [a]] -> [a]
 maybeConcat = foldMap id . catMaybes
 
 eitherConcat :: (Monoid a, Monoid b) => [Either a b] -> (a, b)
-eitherConcat = foldl' folder (mempty, mempty)
+eitherConcat = foldMap mapper
   where
-    folder (lAcc, rAcc) (Left l)  = (lAcc <> l, rAcc)
-    folder (lAcc, rAcc) (Right r) = (lAcc, rAcc <> r)
+    mapper (Left l)  = (l, mempty)
+    mapper (Right r) = (mempty, r)
 
 -- task2
 instance Semigroup (NonEmpty a) where
@@ -45,7 +44,7 @@ instance Semigroup Name where
   (Name x) <> (Name y)
     | x == ""   = Name y
     | y == ""   = Name x
-    | otherwise = Name $ x ++ "." ++ y
+    | otherwise = Name (x ++ "." ++ y)
 
 instance Monoid Name where
   mempty = Name ""
@@ -65,9 +64,9 @@ instance Semigroup Builder where
   l@(One _) <> (Many []) = l
   (Many []) <> r@(One _) = r
   l@(One _) <> r@(One _) = Many [l, r]
-  x@(One _) <> (Many xs) = Many $ x:xs
-  (Many xs) <> x@(One _) = Many $ x:xs
-  (Many xs) <> (Many ys) = Many $ xs ++ ys
+  x@(One _) <> (Many xs) = Many (x:xs)
+  (Many xs) <> x@(One _) = Many (x:xs)
+  (Many xs) <> (Many ys) = Many (xs ++ ys)
 
 instance Monoid Builder where
   mempty = Many []
