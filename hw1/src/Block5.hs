@@ -10,13 +10,11 @@ module Block5
 
 import Block4 (NonEmpty (..))
 import Data.List (foldl')
+import Data.Maybe (catMaybes)
 
 -- task1
 maybeConcat :: [Maybe [a]] -> [a]
-maybeConcat = foldMap mapper
-  where
-    mapper Nothing   = mempty
-    mapper (Just xs) = xs
+maybeConcat = foldMap id . catMaybes
 
 eitherConcat :: (Monoid a, Monoid b) => [Either a b] -> (a, b)
 eitherConcat = foldl' folder (mempty, mempty)

@@ -68,22 +68,27 @@ instance Enum Day where
       6 -> Sunday
       _ -> error "Incorect input"
 
+instance Bounded Day where
+  maxBound = Sunday
+  minBound = Monday
+
+daysInWeek :: Int
+daysInWeek = 1 + fromEnum (maxBound :: Day)
+
 nextDay :: Day -> Day
 nextDay Sunday = Monday
 nextDay day    = succ day
 
 afterDays :: Day -> Int -> Day
-afterDays day cnt = toEnum $ (cnt + fromEnum day) `mod` (1 + fromEnum Sunday)
+afterDays day cnt = toEnum $ (cnt + fromEnum day) `mod` daysInWeek
 
 isWeekend :: Day -> Bool
-isWeekend day =
-  case day of
-    Saturday -> True
-    Sunday   -> True
-    _        -> False
+isWeekend Saturday = True
+isWeekend Sunday   = True
+isWeekend _        = False
 
 daysToParty :: Day -> Int
-daysToParty day = fromEnum $ (fromEnum Friday - fromEnum day) `mod` (1 + fromEnum Sunday)
+daysToParty day = fromEnum $ (fromEnum Friday - fromEnum day) `mod` daysInWeek
 
 -- task 2
 data Walls = Walls
@@ -106,12 +111,16 @@ data LordError = NoCastle | AlreadyWasLord
 data WallsError = NeedCastle | NoLord | TooFewPeople | AlreadyWereWalls
 
 buildCastle :: City -> (City, Bool)
-buildCastle city@City { castle = Just _ }  = (city, False)
-buildCastle city@City { castle = Nothing } = (city { castle = Just $ Castle Nothing Nothing }, True)
+buildCastle city =
+  case castle city of
+    Just _  -> (city, False)
+    Nothing -> (city { castle = Just $ Castle Nothing Nothing }, True)
 
 buildBuiding :: City -> Building -> (City, Bool)
-buildBuiding city@City { building = Just _ } _  = (city, False)
-buildBuiding city@City { building = Nothing } b = (city { building = Just b }, True)
+buildBuiding city b =
+  case building city of
+    Just _  -> (city, False)
+    Nothing -> (city { building = Just b }, True)
 
 acceptFamily :: City -> [Human] -> (City, Maybe FamilyError)
 acceptFamily city@City { houses = x :| xs} family =
@@ -124,11 +133,11 @@ acceptFamily city@City { houses = x :| xs} family =
     _            -> (city, Just TooBig)
 
 acceptLord :: City -> (City, Maybe LordError)
-acceptLord city@City { castle = Nothing } = (city, Just NoCastle)
-acceptLord city@City { castle = Just (Castle _ (Just Lord)) } =
-  (city, Just AlreadyWasLord)
-acceptLord city@City { castle = Just (Castle walls Nothing) } =
-  (city { castle = Just (Castle walls (Just Lord)) }, Nothing)
+acceptLord city =
+  case castle city of
+    Nothing                     -> (city, Just NoCastle)
+    Just (Castle _ (Just Lord)) -> (city, Just AlreadyWasLord)
+    Just (Castle walls Nothing) -> (city { castle = Just (Castle walls (Just Lord)) }, Nothing)
 
 peopleCnt :: NonEmpty House -> Int
 peopleCnt xs = getSum $ foldMap mapper xs
@@ -139,13 +148,17 @@ peopleCnt xs = getSum $ foldMap mapper xs
     mapper (House4 _ _ _ _) = Sum 4
 
 buildWalls :: City -> (City, Maybe WallsError)
-buildWalls city@City { castle = Just (Castle (Just Walls) _) } = (city, Just AlreadyWereWalls)
-buildWalls city@City { castle = Nothing } = (city, Just NeedCastle)
-buildWalls city@City {castle = Just (Castle Nothing Nothing) } = (city, Just NoLord)
-buildWalls city@City {castle = Just (Castle Nothing (Just Lord)) } =
-  if peopleCnt (houses city) >= 10
-  then (city {castle = Just (Castle (Just Walls) (Just Lord)) }, Nothing)
-  else (city, Just TooFewPeople)
+buildWalls city =
+  case castle city of
+    Nothing                           -> (city, Just NeedCastle)
+    Just (Castle (Just Walls) _)      -> (city, Just AlreadyWereWalls)
+    Just (Castle Nothing Nothing)     -> (city, Just NoLord)
+    Just (Castle Nothing (Just Lord)) -> checkPeople city
+  where
+    checkPeople checkedCity =
+      if peopleCnt (houses checkedCity) >= 10
+      then (city {castle = Just (Castle (Just Walls) (Just Lord)) }, Nothing)
+      else (city, Just TooFewPeople)
 
 -- task 3
 data Nat

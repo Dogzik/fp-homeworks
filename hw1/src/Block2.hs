@@ -6,15 +6,16 @@ module Block2
 
 import Numeric.Natural (Natural)
 
-removeAt :: [a] -> Natural -> (a, [a])
-removeAt []    _   = error "Index out of bound"
-removeAt (h:t) 0   = (h, t)
-removeAt (h:t) ind = let (e, l) = removeAt t (ind - 1) in (e, h:l)
-
 removeAtSafe :: [a] -> Natural -> (Maybe a, [a])
 removeAtSafe []    _   = (Nothing, [])
 removeAtSafe (h:t) 0   = (Just h, t)
 removeAtSafe (h:t) ind = let (e, l) = removeAtSafe t (ind - 1) in (e, h:l)
+
+removeAt :: [a] -> Natural -> (a, [a])
+removeAt xs ind =
+  case removeAtSafe xs ind of
+    (Nothing, _)   -> error "Index out of bound"
+    (Just e, rest) -> (e, rest)
 
 mergeSort :: Ord a => [a] -> [a]
 mergeSort [] = []
