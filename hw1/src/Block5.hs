@@ -60,9 +60,13 @@ instance Monoid (Endo a) where
 -- task3
 data Builder = One Char | Many [Builder] deriving (Show)
 
+instance Eq Builder where
+  a == b = toString a == toString b
+
 instance Semigroup Builder where
   l       <> Many [] = l
   Many [] <> r       = r
+  One x   <> Many xs = Many ((One x):xs)
   l       <> r       = Many [l, r]
 
 instance Monoid Builder where
