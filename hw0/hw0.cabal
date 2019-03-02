@@ -18,7 +18,7 @@ tested-with:         GHC == 8.0.1
 
 library
   hs-source-dirs:      src
-  exposed-modules:     Task1 Task2 Task3 Task4 Task5 Task7
+  exposed-modules:     Task1 Task2 Task3 Task4 Task5 Task6 Task7
   ghc-options:         -Wall
   build-depends:       base >= 4.9 && < 5
   default-language:    Haskell2010

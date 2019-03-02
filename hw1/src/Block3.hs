@@ -215,13 +215,13 @@ data Tree a
   | Node (NonEmpty a) (Tree a) (Tree a)
   deriving (Show)
 
-empty :: Ord a => Tree a -> Bool
+empty :: Tree a -> Bool
 empty Leaf = True
 empty _    = False
 
-size :: Ord a => Tree a -> Int
-size Leaf                = 0
-size (Node _ left right) = 1 + size left + size right
+size :: Tree a -> Int
+size Leaf                    = 0
+size (Node elems left right) = length elems + size left + size right
 
 contains :: Ord a => a -> Tree a -> Maybe (Tree a)
 contains _ Leaf = Nothing
