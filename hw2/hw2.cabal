@@ -18,15 +18,21 @@ tested-with:         GHC == 8.0.1
 
 library
   hs-source-dirs:      src
-  exposed-modules:     Lib
+  exposed-modules:     Block1, Block2
+                     , MonadInstances.FishToJoin, MonadInstances.FishToMonad, MonadInstances.MonadToFish, MonadInstances.MonadToJoin
   ghc-options:         -Wall
-  build-depends:       base >= 4.9 && < 5
+  build-depends:       base >= 4.9 && < 5, mtl
   default-language:    Haskell2010
 
-executable hw2
-  hs-source-dirs:      app
-  main-is:             Main.hs
-  ghc-options:         -Wall -Werror -threaded -rtsopts -with-rtsopts=-N
+test-suite hw2-test
+  type:                exitcode-stdio-1.0
+  hs-source-dirs:      test
+  main-is:             Spec.hs
   build-depends:       base
                      , hw2
+                     , hspec
+                     , QuickCheck
+  ghc-options:         -Wall -Werror -threaded -rtsopts -with-rtsopts=-N
+  other-modules:       Block1Spec
   default-language:    Haskell2010
+  build-tool-depends:  hspec-discover:hspec-discover
