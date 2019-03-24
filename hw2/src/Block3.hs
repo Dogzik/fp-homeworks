@@ -4,44 +4,50 @@ module Block3
   , eof
   , ok
   , parseCBS
+  , parseInteger
+  , parseIntegerStrict
+  , parseListListInteger
+  , parseListListIntegerStrict
   , parser
   , satisfy
   , stream
   ) where
 
-import Control.Applicative (Alternative, empty, (<|>))
+import Control.Applicative (Alternative, empty, some, (<|>), many)
+import Data.Char (isDigit, isSpace)
+import Control.Monad (replicateM)
+import Text.Read (readMaybe)
 
 -- task1
-newtype Parser s a = Parser { runParser :: [s] -> Maybe (a, [s]) }
+data Parser s a = Parser { runParser :: ([s] -> Maybe (a, [s])) }
 
 parser :: ([s] -> Maybe (a, [s])) -> Parser s a
 parser p = Parser { runParser = p }
 
 instance Functor (Parser s) where
-  fmap f (Parser p)  = parser $ \input -> do
-    (a, rest) <- p input
+  fmap f p = parser $ \input -> do
+    (a, rest) <- runParser p input
     return (f a, rest)
 
 instance Applicative (Parser s) where
-  pure a = Parser $ \input -> return (a, input)
+  pure a = parser $ \input -> return (a, input)
 
-  Parser pAB <*> Parser pA = parser $ \input -> do
-    (ab, s1) <- pAB input
-    (a, s2) <- pA s1
+  pAB <*> pA = parser $ \input -> do
+    (ab, s1) <- runParser pAB input
+    (a, s2) <- runParser pA s1
     return (ab a, s2)
 
 instance Monad (Parser s) where
   return = pure
 
-  Parser pA >>= f = parser $ \input -> do
-    (a, s1) <- pA input
-    let pB = f a
-    runParser pB s1
+  pA >>= f = parser $ \input -> do
+    (a, s1) <- runParser pA input
+    runParser (f a) s1
 
 instance Alternative (Parser s) where
   empty = parser $ const Nothing
 
-  Parser f <|> Parser g = parser $ \input -> f input <|> g input
+  f <|> g = parser $ \input -> runParser f input <|> runParser g input
 
 -- task2
 ok :: Parser s ()
@@ -71,4 +77,29 @@ parseCBS = s <* eof
   where
     s = (element '(' *> s *> element ')' *> s) <|> ok
 
+parseIntegerText :: Parser Char [Char]
+parseIntegerText = ((flip const <$> element '+') <|> ((:) <$> element '-') <|> (flip const <$> ok)) <*> (some $ satisfy isDigit)
     
+parseInteger :: Parser Char Integer
+parseInteger = read <$> parseIntegerText
+
+parseIntegerStrict :: Parser Char Integer
+parseIntegerStrict = parseInteger <* eof
+  
+-- task4
+parseSpace :: Parser Char ()
+parseSpace = const () <$> (many $ satisfy isSpace)
+
+parseListListInteger :: Parser Char [[Integer]]
+parseListListInteger = addElem ',' *> many parseOneList
+  where
+    addElem c = parser $ \input -> return ((), c:input)
+    safeReadInt s = case readMaybe s of 
+                      Nothing -> empty
+                      Just x -> return x
+    parseOneInt = (parseSpace *> element ',' *> parseSpace *> parseIntegerText) >>= safeReadInt
+    parseOneInteger = parseSpace *> element ',' *> parseSpace *> parseInteger
+    parseOneList = parseOneInt >>= (flip replicateM parseOneInteger)
+
+parseListListIntegerStrict :: Parser Char [[Integer]]
+parseListListIntegerStrict = parseListListInteger <* parseSpace <* eof
