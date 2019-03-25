@@ -1,6 +1,6 @@
 module Block2
-  ( ArithmeticError
-  , Expr
+  ( ArithmeticError (..)
+  , Expr (..)
   , eval
   , moving
   ) where
@@ -20,7 +20,7 @@ data Expr
 data ArithmeticError
    = DivisionByZero
    | NegativeExponent
-   deriving (Show)
+   deriving (Show, Eq)
 
 biEval :: (Int -> Int -> Either ArithmeticError Int) -> Expr -> Expr -> Either ArithmeticError Int
 biEval op l r = do
