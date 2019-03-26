@@ -33,6 +33,6 @@ test-suite hw2-test
                      , hspec
                      , QuickCheck
   ghc-options:         -Wall -Werror -threaded -rtsopts -with-rtsopts=-N
-  other-modules:       Block1Spec, Block2Spec
+  other-modules:       Block1Spec, Block2Spec, Block3Spec
   default-language:    Haskell2010
   build-tool-depends:  hspec-discover:hspec-discover

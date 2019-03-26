@@ -91,13 +91,12 @@ parseSpace :: Parser Char ()
 parseSpace = const () <$> (many $ satisfy isSpace)
 
 parseListListInteger :: Parser Char [[Integer]]
-parseListListInteger = addElem ',' *> many parseOneList
+parseListListInteger = ((:) <$> parseOneList <*> (many $ parseSpace *> element ',' *> parseOneList)) <|> (const [] <$> ok)
   where
-    addElem c = parser $ \input -> return ((), c:input)
     safeReadInt s = case readMaybe s of 
                       Nothing -> empty
-                      Just x -> return x
-    parseOneInt = (parseSpace *> element ',' *> parseSpace *> parseIntegerText) >>= safeReadInt
+                      Just x  -> return x
+    parseOneInt = (parseSpace *> parseIntegerText) >>= safeReadInt
     parseOneInteger = parseSpace *> element ',' *> parseSpace *> parseInteger
     parseOneList = parseOneInt >>= (flip replicateM parseOneInteger)
 
