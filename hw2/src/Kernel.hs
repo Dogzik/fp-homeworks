@@ -4,13 +4,13 @@ module Kernel
   , exit
   , fork
   , kernel
+  , main1
+  , main2
+  , main3
   , readLine
   , runProcess
   , writeLine
   , yield
-  , main1
-  , main2
-  , main3
   ) where
 
 newtype Cont r a = Cont { runCont :: (a -> r) -> r }
