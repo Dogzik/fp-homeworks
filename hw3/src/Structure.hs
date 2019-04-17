@@ -1,6 +1,6 @@
 module Structure
   ( Arg
-  , ArgFragment
+  , ArgFragment(..)
   , Command
   , DollarExpr(..)
   , ElifClause
@@ -19,6 +19,7 @@ data DollarExpr
 
 data ArgFragment
   = Symbols String
+  | Symbol Char
   | Expr DollarExpr
   deriving (Show)
 
