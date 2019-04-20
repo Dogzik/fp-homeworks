@@ -1,14 +1,15 @@
 module Structure
   ( Arg
   , ArgFragment(..)
-  , Command
+  , Assignment(..)
+  , Command(..)
   , DollarExpr(..)
-  , ElifClause
-  , ElseClause
-  , IfClause
+  , ElifClause(..)
+  , ElseClause(..)
+  , IfClause(..)
   , Program
-  , SingleCommand
-  , WhileClause
+  , SingleCommand(..)
+  , WhileClause(..)
   ) where
 
 data DollarExpr
@@ -25,13 +26,18 @@ data ArgFragment
 
 type Arg = [ArgFragment]
 
+data Assignment = Assignment
+  { key   :: String
+  , value :: Arg
+  } deriving (Show)
+
 data SingleCommand = SingleCommand
-  { name :: String
+  { name :: Arg
   , args :: [Arg]
   } deriving (Show)
 
 data ElifClause = ElifClause
-  { elifCond :: [SingleCommand]
+  { elifCond :: [Command]
   , elifBody :: [Command]
   } deriving (Show)
 
@@ -40,19 +46,20 @@ newtype ElseClause = ElseClause
   } deriving (Show)
 
 data IfClause = IfClause
-  { ifCond      :: [SingleCommand]
+  { ifCond      :: [Command]
   , ifBody      :: [Command]
   , elifClauses :: [ElifClause]
-  , elseClause  :: ElseClause
+  , elseClause  :: Maybe ElseClause
   } deriving (Show)
 
 data WhileClause = WhileClause
-  { whileCond :: [SingleCommand]
+  { whileCond :: [Command]
   , whileBode :: [Command]
   } deriving (Show)
 
 data Command
   = SimpleCommand SingleCommand
+  | AssignCommand Assignment
   | If IfClause
   | While WhileClause
   | Subshell Program

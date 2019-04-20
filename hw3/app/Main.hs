@@ -9,7 +9,7 @@ main = do
   handle <- openFile "/home/dogzik/script.sh" ReadMode
   input <- hGetContents handle
   --let res = runParser parseDoubleQuote "" input
-  parseTest parseArg input
+  parseTest parseProgram input
   -- case res of
   --   Left a  -> print a
   --   Right b -> putStr $ show b
