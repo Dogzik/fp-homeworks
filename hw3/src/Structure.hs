@@ -3,6 +3,7 @@ module Structure
   , ArgFragment(..)
   , Assignment(..)
   , Command(..)
+  , DQFragment(..)
   , DollarExpr(..)
   , ElifClause(..)
   , ElseClause(..)
@@ -18,10 +19,16 @@ data DollarExpr
   | InlineCall Program
   deriving (Show)
 
+data DQFragment
+  = JustSymbol Char
+  | Subst DollarExpr
+  deriving (Show)
+
 data ArgFragment
-  = Symbols String
-  | Symbol Char
+  = SingleQuotes String
+  | DoubleQuotes [DQFragment]
   | Expr DollarExpr
+  | Symbol Char
   deriving (Show)
 
 type Arg = [ArgFragment]

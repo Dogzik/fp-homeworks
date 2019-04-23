@@ -18,11 +18,14 @@ tested-with:         GHC == 8.0.1
 
 library
   hs-source-dirs:      src
-  exposed-modules:     Parser Structure
+  exposed-modules:     Parser Structure Interpreter Enviroment
   ghc-options:         -Wall
   build-depends:       base >= 4.9 && < 5
                      , megaparsec
-                     , text
+                     , filepath
+                     , mtl
+                     , containers
+                     , process
   default-language:    Haskell2010
 
 executable mini-shell

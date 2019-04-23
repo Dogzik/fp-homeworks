@@ -5,9 +5,9 @@ module Parser
 import Control.Applicative (liftA2)
 import Control.Monad (void)
 import Data.Void (Void)
-import Structure (Arg, ArgFragment (..), Assignment (..), Command (..), DollarExpr (..),
-                  ElifClause (..), ElseClause (..), IfClause (..), Program, SingleCommand (..),
-                  WhileClause (..))
+import Structure (Arg, ArgFragment (..), Assignment (..), Command (..), DQFragment (..),
+                  DollarExpr (..), ElifClause (..), ElseClause (..), IfClause (..), Program,
+                  SingleCommand (..), WhileClause (..))
 import Text.Megaparsec (ParseErrorBundle, Parsec, anySingle, anySingleBut, eof, many, noneOf,
                         notFollowedBy, some, try, (<|>))
 import Text.Megaparsec.Char (alphaNumChar, char, digitChar, letterChar, newline, space, spaceChar,
@@ -31,10 +31,11 @@ parseIdentifier =
     underscope = char '_'
 
 parseSubshell :: Parser Program
-parseSubshell = char '(' *> space *> (try nonEmptyBody <|> try ([] <$ space)) <* char ')'
+parseSubshell =
+  char '(' *> space *> (try nonEmptyBody <|> try ([] <$ space)) <* char ')'
   where
     optionalEnd = try commandSuffix <|> try (void $ manyBacktrace safeSpace)
-    nonEmptyBody = 
+    nonEmptyBody =
       (:) <$> parseCommandWithoutDelimiter <*>
       manyBacktrace (try (commandSuffix *> parseCommandWithoutDelimiter)) <*
       optionalEnd
@@ -61,33 +62,30 @@ parseEscaped p = char '\\' *> p
 parseEscapedChar :: Char -> Parser Char
 parseEscapedChar c = parseEscaped $ char c
 
-parseDoubleQuote :: Parser [ArgFragment]
+parseDoubleQuote :: Parser [DQFragment]
 parseDoubleQuote = doubleQuote *> body <* doubleQuote
   where
     doubleQuote = char '\"'
+    tryEscapedChar = try . parseEscapedChar
     escaped =
-      Symbol <$>
-      (try (parseEscapedChar '\\') <|> try (parseEscapedChar '\"') <|>
-       try (parseEscapedChar '$'))
-    dollarExpr = Expr <$> parseDollarExpr
-    anyButQuote = Symbol <$> anySingleBut '\"'
-    body =
-      liftA2 (:) (try escaped <|> try dollarExpr <|> try anyButQuote) body <|>
-      pure []
+      JustSymbol <$>
+      (tryEscapedChar '\\' <|> tryEscapedChar '\"' <|> tryEscapedChar '$')
+    dollarExpr = Subst <$> parseDollarExpr
+    anyButQuote = JustSymbol <$> anySingleBut '\"'
+    body = manyBacktrace (try escaped <|> try dollarExpr <|> try anyButQuote)
 
 parseArg :: Parser Arg
 parseArg =
-  concat <$>
   some
     (try escaped <|> try singleQuote <|> try doubleQuote <|> try dollarExpr <|>
      try simpleChar)
   where
-    escaped = pure . Symbol <$> parseEscaped anySingle
-    singleQuote = pure . Symbols <$> parseSingleQuote
-    doubleQuote = parseDoubleQuote
-    dollarExpr = pure . Expr <$> parseDollarExpr
+    escaped = Symbol <$> parseEscaped anySingle
+    singleQuote = SingleQuotes <$> parseSingleQuote
+    doubleQuote = DoubleQuotes <$> parseDoubleQuote
+    dollarExpr = Expr <$> parseDollarExpr
     simpleChar =
-      pure . Symbol <$>
+      Symbol <$>
       (notFollowedBy eof *> notFollowedBy spaceChar *> noneOf ['(', ')', ';'])
 
 safeSpace :: Parser Char
