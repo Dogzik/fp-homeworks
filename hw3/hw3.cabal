@@ -26,6 +26,8 @@ library
                      , mtl
                      , containers
                      , process
+                     , split
+                     , exceptions
   default-language:    Haskell2010
 
 executable mini-shell
