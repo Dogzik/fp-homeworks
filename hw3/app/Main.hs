@@ -21,7 +21,6 @@ main = do
   case parse parseProgram "" input of
     Left e -> print $ errorBundlePretty e
     Right script -> do
-      print $ show script
       code <- runScript script
       print $ show code
 

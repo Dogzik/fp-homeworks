@@ -61,7 +61,7 @@ data IfClause = IfClause
 
 data WhileClause = WhileClause
   { whileCond :: [Command]
-  , whileBode :: [Command]
+  , whileBody :: [Command]
   } deriving (Show)
 
 data Command

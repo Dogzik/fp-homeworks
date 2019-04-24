@@ -20,7 +20,7 @@ import Data.Map.Strict (insert)
 import Enviroment (EnvState (..), MonadConsole (..), PosArgs, getEnvVar, getPosArg)
 import Parser (isIdentifier)
 import Structure (Arg, ArgFragment (..), Assignment (..), Command (..), DQFragment (..),
-                  DollarExpr (..), Program, SingleCommand (..))
+                  DollarExpr (..), Program, SingleCommand (..), WhileClause (..))
 import System.Exit (ExitCode (..))
 import System.FilePath (FilePath, isAbsolute, (</>))
 import Text.Read (readMaybe)
@@ -67,7 +67,24 @@ execCommand (SimpleCommand command) hook = do
         _ -> do
           dir <- gets curDir
           callExternal dir name args
-execCommand _ _ = error "Kok"
+execCommand (While clause) hook =
+  execWhile ExitSuccess (whileCond clause) (whileBody clause) hook
+execCommand _ _ = error "kek"
+
+execWhile ::
+     (MonadReader PosArgs m, MonadState EnvState m, MonadConsole m, MonadCont m)
+  => ExitCode
+  -> Program
+  -> Program
+  -> (ExitCode -> m ExitCode)
+  -> m ExitCode
+execWhile oldCode cond body hook = do
+  condCode <- interpret cond hook
+  case condCode of
+    ExitFailure x -> return oldCode
+    ExitSuccess -> do
+      newCode <- interpret body hook
+      execWhile newCode cond body hook
 
 execEcho ::
      (MonadReader PosArgs m, MonadState EnvState m, MonadConsole m, MonadCont m)
@@ -190,11 +207,11 @@ execRead ::
   -> m ExitCode
 execRead args = do
   (code, input) <- readString
+  let strings = words input
+  doCode <- doReadAssign args strings
   case code of
-    ExitFailure x -> return $ ExitFailure x
-    ExitSuccess -> do
-      let strings = words input
-      doReadAssign args strings
+    ExitSuccess -> return doCode
+    _           -> return code
 
 execSubShell ::
      (MonadReader PosArgs m, MonadState EnvState m, MonadConsole m, MonadCont m)
