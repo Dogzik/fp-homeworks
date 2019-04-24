@@ -3,28 +3,29 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
 
--- {-# LANGUAGE UndecidableInstances  #-}
 module Interpreter
   ( interpret
   ) where
 
+import Control.Monad (mapM_)
+import Control.Monad.Catch (SomeException (..), catch)
 import Control.Monad.Cont (MonadCont, callCC)
 import Control.Monad.Reader (MonadReader, ReaderT, ask, asks, local)
-import Control.Monad.State (MonadState, get, gets, put)
-import Control.Monad.Trans (lift)
-import Control.Monad.Catch (catch, SomeException (..))
+import Control.Monad.State (MonadState, get, gets, modify, put)
 import Control.Monad.Writer (WriterT, execWriterT)
 import Data.Char (isSpace)
-import Data.IORef (IORef, readIORef, writeIORef)
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.List.Split (wordsBy)
+import Data.Map.Strict (insert)
 import Enviroment (EnvState (..), MonadConsole (..), PosArgs, getEnvVar, getPosArg)
-import Structure (Arg, ArgFragment (..), DQFragment (..), DollarExpr (..), Program,
-                  SingleCommand (..))
+import Parser (isIdentifier)
+import Structure (Arg, ArgFragment (..), Assignment (..), Command (..), DQFragment (..),
+                  DollarExpr (..), Program, SingleCommand (..))
 import System.Exit (ExitCode (..))
 import System.FilePath (FilePath, isAbsolute, (</>))
-import System.IO (hGetContents)
-import System.Process (StdStream (CreatePipe), createProcess, cwd, proc, std_out, waitForProcess)
+import Text.Read (readMaybe)
+
+import Debug.Trace (trace)
 
 data MetaChar
   = One Char
@@ -34,82 +35,166 @@ data MetaChar
 isMetaSpace (One c) = isSpace c
 isMetaSpace _       = False
 
-data MutableEnv = MutableEnv
-  { mePosArgs  :: PosArgs
-  , meEnvState :: IORef EnvState
-  }
-
-newtype IOConsole a =
-  IOConsole (ReaderT MutableEnv IO a)
-
-unpack :: IOConsole a -> ReaderT MutableEnv IO a
-unpack (IOConsole x) = x
-
-instance Functor IOConsole where
-  fmap f funX = do
-    x <- funX
-    return $ f x
-
-instance Applicative IOConsole where
-  pure = return
-  apF <*> apX = do
-    f <- apF
-    x <- apX
-    return $ f x
-
-instance Monad IOConsole where
-  return = IOConsole . return
-  (IOConsole m) >>= f = IOConsole $ m >>= (unpack . f)
-
-instance MonadReader PosArgs IOConsole where
-  ask = IOConsole $ asks mePosArgs
-  local f (IOConsole m) = IOConsole $ local (updPosArgs f) m
-    where
-      updPosArgs f mEnv =
-        let newPosArgs = f $ mePosArgs mEnv
-         in mEnv {mePosArgs = newPosArgs}
-
-instance MonadState EnvState IOConsole where
-  get =
-    IOConsole $ do
-      stateRef <- asks meEnvState
-      lift $ readIORef stateRef
-  put newState =
-    IOConsole $ do
-      stateRef <- asks meEnvState
-      lift $ writeIORef stateRef newState
-
-instance MonadConsole IOConsole where
-  readString = IOConsole $ doRead `catch` (\(SomeException _) -> return (ExitFailure 1, ""))
-    where
-      doRead = do
-        str <- lift getLine
-        return (ExitSuccess, str)
-  writeString s = IOConsole $ doWrite s `catch` (\(SomeException _) -> return $ ExitFailure 1) 
-    where
-      doWrite s = do
-        lift $ putStrLn s
-        return ExitSuccess 
-  callExternal curDir exec args =
-    IOConsole $ do
-      let processInfo = (proc exec args) {cwd = Just curDir}
-      (_, _, _, procHandle) <- lift $ createProcess processInfo
-      lift $ waitForProcess procHandle
-  callExternalWithOutput curDir exec args =
-    IOConsole $ do
-      let processInfo =
-            (proc exec args) {cwd = Just curDir, std_out = CreatePipe}
-      (_, Just stdoutHandle, _, procHandle) <- lift $ createProcess processInfo
-      code <- lift $ waitForProcess procHandle
-      output <- lift $ hGetContents stdoutHandle
-      return (code, output)
-
 interpret ::
      (MonadReader PosArgs m, MonadState EnvState m, MonadConsole m, MonadCont m)
   => Program
-  -> (ExitCode -> m b)
+  -> (ExitCode -> m ExitCode)
   -> m ExitCode
-interpret = undefined
+interpret [] _ = return ExitSuccess
+interpret [command] hook = execCommand command hook
+interpret (command:rest) hook = do
+  execCommand command hook
+  interpret rest hook
+
+execCommand ::
+     (MonadReader PosArgs m, MonadState EnvState m, MonadConsole m, MonadCont m)
+  => Command
+  -> (ExitCode -> m ExitCode)
+  -> m ExitCode
+execCommand (AssignCommand ass) _ = execAssign ass
+execCommand (Subshell sh) _ = execSubShell sh
+execCommand (SimpleCommand command) hook = do
+  params <- calcSingleCommand command
+  case params of
+    [] -> return ExitSuccess
+    name:args ->
+      case name of
+        "echo" -> execEcho args
+        "pwd" -> execPwd args
+        "cd" -> execCd args
+        "exit" -> execExit args hook
+        "read" -> execRead args
+        _ -> do
+          dir <- gets curDir
+          callExternal dir name args
+execCommand _ _ = error "Kok"
+
+execEcho ::
+     (MonadReader PosArgs m, MonadState EnvState m, MonadConsole m, MonadCont m)
+  => [String]
+  -> m ExitCode
+execEcho [] = writeString "\n"
+execEcho args@(x:xs) =
+  if x == "-n"
+    then writeString $ unwords xs
+    else writeString $ unwords args ++ "\n"
+
+execPwd ::
+     (MonadReader PosArgs m, MonadState EnvState m, MonadConsole m, MonadCont m)
+  => [String]
+  -> m ExitCode
+execPwd args =
+  case args of
+    [] -> do
+      dir <- gets curDir
+      writeString $ dir ++ "\n"
+    _ -> do
+      writeString "Too many arguments for pwd\n"
+      return $ ExitFailure 2
+
+execCd ::
+     (MonadReader PosArgs m, MonadState EnvState m, MonadConsole m, MonadCont m)
+  => [String]
+  -> m ExitCode
+execCd args =
+  case args of
+    [] -> do
+      writeString "Too few arguments for cd\n"
+      return $ ExitFailure 3
+    [path] -> do
+      dir <- gets curDir
+      let newDir = dir </> path
+      exists <- directotyExists newDir
+      if exists
+        then do
+          modify (\s -> s {curDir = newDir})
+          return ExitSuccess
+        else do
+          writeString ("No such directory: " ++ newDir ++ "\n")
+          return $ ExitFailure 2
+    _ -> do
+      writeString "Too many arguments for cd\n"
+      return $ ExitFailure 2
+
+execExit ::
+     (MonadReader PosArgs m, MonadState EnvState m, MonadConsole m, MonadCont m)
+  => [String]
+  -> (ExitCode -> m ExitCode)
+  -> m ExitCode
+execExit args hook =
+  case args of
+    [] -> do
+      writeString "Too few arguments for exit\n"
+      return $ ExitFailure 3
+    [arg] ->
+      case readMaybe arg of
+        Nothing -> do
+          writeString ("Wrong argument for exit: " ++ arg ++ "\n")
+          return $ ExitFailure 1
+        Just x ->
+          if x == 0
+            then hook ExitSuccess
+            else hook $ ExitFailure x
+    _ -> do
+      writeString "Too many arguments for exit\n"
+      return $ ExitFailure 2
+
+setEnvVar ::
+     (MonadReader PosArgs m, MonadState EnvState m, MonadConsole m, MonadCont m)
+  => String
+  -> String
+  -> m ExitCode
+setEnvVar key value =
+  if isIdentifier key
+    then do
+      curEnvVars <- gets envVars
+      let newEnvVars = insert key value curEnvVars
+      modify (\s -> s {envVars = newEnvVars})
+      return ExitSuccess
+    else do
+      writeString (key ++ " is not a valid identifier\n")
+      return $ ExitFailure 2
+
+execAssign ::
+     (MonadReader PosArgs m, MonadState EnvState m, MonadConsole m, MonadCont m)
+  => Assignment
+  -> m ExitCode
+execAssign ass = do
+  realArg <- calcArg $ value ass
+  case realArg of
+    [] -> setEnvVar (key ass) ""
+    [s] -> setEnvVar (key ass) s
+    _ -> do
+      writeString "Too many argumens for assignment\n"
+      return $ ExitFailure 2
+
+doReadAssign ::
+     (MonadReader PosArgs m, MonadState EnvState m, MonadConsole m, MonadCont m)
+  => [String]
+  -> [String]
+  -> m ExitCode
+doReadAssign [] _ = return ExitSuccess
+doReadAssign vars [] = do
+  mapM_ (`setEnvVar` "") vars
+  return ExitSuccess
+doReadAssign [var] values = setEnvVar var $ unwords values
+doReadAssign (var:vars) (value:values) = do
+  code <- setEnvVar var value
+  case code of
+    ExitSuccess   -> doReadAssign vars values
+    ExitFailure x -> return $ ExitFailure x
+
+execRead ::
+     (MonadReader PosArgs m, MonadState EnvState m, MonadConsole m, MonadCont m)
+  => [String]
+  -> m ExitCode
+execRead args = do
+  (code, input) <- readString
+  case code of
+    ExitFailure x -> return $ ExitFailure x
+    ExitSuccess -> do
+      let strings = words input
+      doReadAssign args strings
 
 execSubShell ::
      (MonadReader PosArgs m, MonadState EnvState m, MonadConsole m, MonadCont m)

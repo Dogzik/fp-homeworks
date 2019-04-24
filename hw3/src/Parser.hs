@@ -1,5 +1,6 @@
 module Parser
-  ( parseProgram
+  ( isIdentifier
+  , parseProgram
   ) where
 
 import Control.Applicative (liftA2)
@@ -9,7 +10,7 @@ import Structure (Arg, ArgFragment (..), Assignment (..), Command (..), DQFragme
                   DollarExpr (..), ElifClause (..), ElseClause (..), IfClause (..), Program,
                   SingleCommand (..), WhileClause (..))
 import Text.Megaparsec (ParseErrorBundle, Parsec, anySingle, anySingleBut, eof, many, noneOf,
-                        notFollowedBy, some, try, (<|>))
+                        notFollowedBy, parseMaybe, some, try, (<|>))
 import Text.Megaparsec.Char (alphaNumChar, char, digitChar, letterChar, newline, space, spaceChar,
                              string)
 import Text.Megaparsec.Char.Lexer (decimal)
@@ -29,6 +30,12 @@ parseIdentifier =
     (manyBacktrace (try alphaNumChar <|> try underscope))
   where
     underscope = char '_'
+
+isIdentifier :: String -> Bool
+isIdentifier s =
+  case parseMaybe parseIdentifier s of
+    Nothing -> False
+    _       -> True
 
 parseSubshell :: Parser Program
 parseSubshell =

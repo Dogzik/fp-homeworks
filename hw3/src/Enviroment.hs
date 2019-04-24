@@ -5,7 +5,7 @@
 
 module Enviroment
   ( MonadConsole(..)
-  , PosArgs
+  , PosArgs (..)
   , EnvState(..)
   , getPosArg
   , getEnvVar
@@ -36,6 +36,7 @@ class Monad m =>
   where
   readString :: m (ExitCode, String)
   writeString :: String -> m ExitCode
+  directotyExists :: FilePath -> m Bool
   callExternal :: FilePath -> FilePath -> [String] -> m ExitCode
   callExternalWithOutput ::
        FilePath -> FilePath -> [String] -> m (ExitCode, String)
@@ -43,16 +44,19 @@ class Monad m =>
 instance MonadConsole m => MonadConsole (WriterT String m) where
   readString = lift readString
   writeString s = writer (ExitSuccess, s ++ " ")
+  directotyExists = lift . directotyExists
   callExternal cwd exec args = do
     (code, output) <- lift $ callExternalWithOutput cwd exec args
     tell output
     return code
   callExternalWithOutput cwd exec args =
     lift $ callExternalWithOutput cwd exec args
+  
 
 instance MonadConsole m => MonadConsole (ContT r m) where
   readString = lift readString
   writeString = lift . writeString
+  directotyExists = lift . directotyExists
   callExternal cwd exec args = lift $ callExternal cwd exec args
   callExternalWithOutput cwd exec args =
     lift $ callExternalWithOutput cwd exec args
