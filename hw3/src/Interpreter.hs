@@ -8,30 +8,28 @@ module Interpreter
   ) where
 
 import Control.Monad (mapM_)
-import Control.Monad.Catch (SomeException (..), catch)
 import Control.Monad.Cont (MonadCont, callCC)
-import Control.Monad.Reader (MonadReader, ReaderT, ask, asks, local)
+import Control.Monad.Reader (MonadReader, asks)
 import Control.Monad.State (MonadState, get, gets, modify, put)
-import Control.Monad.Writer (WriterT, execWriterT)
+import Control.Monad.Writer (execWriterT)
 import Data.Char (isSpace)
-import Data.List.NonEmpty (NonEmpty (..))
 import Data.List.Split (wordsBy)
 import Data.Map.Strict (insert)
 import Enviroment (EnvState (..), MonadConsole (..), PosArgs, getEnvVar, getPosArg)
 import Parser (isIdentifier)
 import Structure (Arg, ArgFragment (..), Assignment (..), Command (..), DQFragment (..),
-                  DollarExpr (..), Program, SingleCommand (..), WhileClause (..))
+                  DollarExpr (..), ElifClause (..), ElseClause (..), IfClause (..), Program,
+                  SingleCommand (..), WhileClause (..))
 import System.Exit (ExitCode (..))
-import System.FilePath (FilePath, isAbsolute, (</>))
+import System.FilePath ((</>))
 import Text.Read (readMaybe)
-
-import Debug.Trace (trace)
 
 data MetaChar
   = One Char
   | Many String
   deriving (Show)
 
+isMetaSpace :: MetaChar -> Bool
 isMetaSpace (One c) = isSpace c
 isMetaSpace _       = False
 
@@ -43,7 +41,7 @@ interpret ::
 interpret [] _ = return ExitSuccess
 interpret [command] hook = execCommand command hook
 interpret (command:rest) hook = do
-  execCommand command hook
+  _ <- execCommand command hook
   interpret rest hook
 
 execCommand ::
@@ -57,19 +55,37 @@ execCommand (SimpleCommand command) hook = do
   params <- calcSingleCommand command
   case params of
     [] -> return ExitSuccess
-    name:args ->
-      case name of
-        "echo" -> execEcho args
-        "pwd" -> execPwd args
-        "cd" -> execCd args
-        "exit" -> execExit args hook
-        "read" -> execRead args
+    exec:execArgs ->
+      case exec of
+        "echo" -> execEcho execArgs
+        "pwd" -> execPwd execArgs
+        "cd" -> execCd execArgs
+        "exit" -> execExit execArgs hook
+        "read" -> execRead execArgs
         _ -> do
           dir <- gets curDir
-          callExternal dir name args
-execCommand (While clause) hook =
-  execWhile ExitSuccess (whileCond clause) (whileBody clause) hook
-execCommand _ _ = error "kek"
+          callExternal dir exec execArgs
+execCommand (While whileClause) hook =
+  execWhile ExitSuccess (whileCond whileClause) (whileBody whileClause) hook
+execCommand (If ifClause) hook = do
+  code <- interpret (ifCond ifClause) hook
+  case code of
+    ExitSuccess -> interpret (ifBody ifClause) hook
+    _           -> execElifElse (elifClauses ifClause) (elseClause ifClause) hook
+
+execElifElse ::
+     (MonadReader PosArgs m, MonadState EnvState m, MonadConsole m, MonadCont m)
+  => [ElifClause]
+  -> Maybe ElseClause
+  -> (ExitCode -> m ExitCode)
+  -> m ExitCode
+execElifElse [] Nothing _ = return ExitSuccess
+execElifElse [] (Just elseCommand) hook = interpret (elseBody elseCommand) hook
+execElifElse (cur:rest) maybeElse hook = do
+  code <- interpret (elifCond cur) hook
+  case code of
+    ExitSuccess -> interpret (elifBody cur) hook
+    _           -> execElifElse rest maybeElse hook
 
 execWhile ::
      (MonadReader PosArgs m, MonadState EnvState m, MonadConsole m, MonadCont m)
@@ -81,7 +97,7 @@ execWhile ::
 execWhile oldCode cond body hook = do
   condCode <- interpret cond hook
   case condCode of
-    ExitFailure x -> return oldCode
+    ExitFailure _ -> return oldCode
     ExitSuccess -> do
       newCode <- interpret body hook
       execWhile newCode cond body hook
@@ -91,32 +107,32 @@ execEcho ::
   => [String]
   -> m ExitCode
 execEcho [] = writeString "\n"
-execEcho args@(x:xs) =
+execEcho (x:xs) =
   if x == "-n"
     then writeString $ unwords xs
-    else writeString $ unwords args ++ "\n"
+    else writeString $ unwords (x : xs) ++ "\n"
 
 execPwd ::
      (MonadReader PosArgs m, MonadState EnvState m, MonadConsole m, MonadCont m)
   => [String]
   -> m ExitCode
-execPwd args =
-  case args of
+execPwd pwdArgs =
+  case pwdArgs of
     [] -> do
       dir <- gets curDir
       writeString $ dir ++ "\n"
     _ -> do
-      writeString "Too many arguments for pwd\n"
+      _ <- writeString "Too many arguments for pwd\n"
       return $ ExitFailure 2
 
 execCd ::
      (MonadReader PosArgs m, MonadState EnvState m, MonadConsole m, MonadCont m)
   => [String]
   -> m ExitCode
-execCd args =
-  case args of
+execCd cdArgs =
+  case cdArgs of
     [] -> do
-      writeString "Too few arguments for cd\n"
+      _ <- writeString "Too few arguments for cd\n"
       return $ ExitFailure 3
     [path] -> do
       dir <- gets curDir
@@ -127,10 +143,10 @@ execCd args =
           modify (\s -> s {curDir = newDir})
           return ExitSuccess
         else do
-          writeString ("No such directory: " ++ newDir ++ "\n")
+          _ <- writeString ("No such directory: " ++ newDir ++ "\n")
           return $ ExitFailure 2
     _ -> do
-      writeString "Too many arguments for cd\n"
+      _ <- writeString "Too many arguments for cd\n"
       return $ ExitFailure 2
 
 execExit ::
@@ -138,22 +154,22 @@ execExit ::
   => [String]
   -> (ExitCode -> m ExitCode)
   -> m ExitCode
-execExit args hook =
-  case args of
+execExit exitArgs hook =
+  case exitArgs of
     [] -> do
-      writeString "Too few arguments for exit\n"
+      _ <- writeString "Too few arguments for exit\n"
       return $ ExitFailure 3
     [arg] ->
       case readMaybe arg of
         Nothing -> do
-          writeString ("Wrong argument for exit: " ++ arg ++ "\n")
+          _ <- writeString ("Wrong argument for exit: " ++ arg ++ "\n")
           return $ ExitFailure 1
         Just x ->
           if x == 0
             then hook ExitSuccess
             else hook $ ExitFailure x
     _ -> do
-      writeString "Too many arguments for exit\n"
+      _ <- writeString "Too many arguments for exit\n"
       return $ ExitFailure 2
 
 setEnvVar ::
@@ -161,15 +177,15 @@ setEnvVar ::
   => String
   -> String
   -> m ExitCode
-setEnvVar key value =
-  if isIdentifier key
+setEnvVar setKey setValue =
+  if isIdentifier setKey
     then do
       curEnvVars <- gets envVars
-      let newEnvVars = insert key value curEnvVars
+      let newEnvVars = insert setKey setValue curEnvVars
       modify (\s -> s {envVars = newEnvVars})
       return ExitSuccess
     else do
-      writeString (key ++ " is not a valid identifier\n")
+      _ <- writeString (setKey ++ " is not a valid identifier\n")
       return $ ExitFailure 2
 
 execAssign ::
@@ -182,7 +198,7 @@ execAssign ass = do
     [] -> setEnvVar (key ass) ""
     [s] -> setEnvVar (key ass) s
     _ -> do
-      writeString "Too many argumens for assignment\n"
+      _ <- writeString "Too many argumens for assignment\n"
       return $ ExitFailure 2
 
 doReadAssign ::
@@ -195,20 +211,20 @@ doReadAssign vars [] = do
   mapM_ (`setEnvVar` "") vars
   return ExitSuccess
 doReadAssign [var] values = setEnvVar var $ unwords values
-doReadAssign (var:vars) (value:values) = do
-  code <- setEnvVar var value
+doReadAssign (var:vars) (val:vals) = do
+  code <- setEnvVar var val
   case code of
-    ExitSuccess   -> doReadAssign vars values
+    ExitSuccess   -> doReadAssign vars vals
     ExitFailure x -> return $ ExitFailure x
 
 execRead ::
      (MonadReader PosArgs m, MonadState EnvState m, MonadConsole m, MonadCont m)
   => [String]
   -> m ExitCode
-execRead args = do
+execRead readArgs = do
   (code, input) <- readString
   let strings = words input
-  doCode <- doReadAssign args strings
+  doCode <- doReadAssign readArgs strings
   case code of
     ExitSuccess -> return doCode
     _           -> return code
@@ -229,12 +245,6 @@ execMockedSubShell ::
   -> m String
 execMockedSubShell subProgram = execWriterT $ execSubShell subProgram
 
-trimLeft :: String -> String
-trimLeft = dropWhile isSpace
-
-trimRight :: String -> String
-trimRight s = reverse $ trimLeft $ reverse s
-
 trim :: String -> String
 trim = f . f
   where
@@ -245,7 +255,7 @@ calcDollarExpr ::
   => DollarExpr
   -> m String
 calcDollarExpr (PosArg num)            = asks $ getPosArg num
-calcDollarExpr (EnvVar key)            = gets $ getEnvVar key
+calcDollarExpr (EnvVar varName)        = gets $ getEnvVar varName
 calcDollarExpr (InlineCall subProgram) = trim <$> execMockedSubShell subProgram
 
 calcDoubleQuotes ::

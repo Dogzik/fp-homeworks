@@ -9,15 +9,13 @@ import Data.Void (Void)
 import Structure (Arg, ArgFragment (..), Assignment (..), Command (..), DQFragment (..),
                   DollarExpr (..), ElifClause (..), ElseClause (..), IfClause (..), Program,
                   SingleCommand (..), WhileClause (..))
-import Text.Megaparsec (ParseErrorBundle, Parsec, anySingle, anySingleBut, eof, many, noneOf,
+import Text.Megaparsec (Parsec, anySingle, anySingleBut, eof, many, noneOf,
                         notFollowedBy, parseMaybe, some, try, (<|>))
 import Text.Megaparsec.Char (alphaNumChar, char, digitChar, letterChar, newline, space, spaceChar,
                              string)
 import Text.Megaparsec.Char.Lexer (decimal)
 
 type Parser = Parsec Void String
-
-type ParserError = ParseErrorBundle String Void
 
 manyBacktrace :: Parser a -> Parser [a]
 manyBacktrace = many . try

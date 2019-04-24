@@ -16,17 +16,20 @@ import Text.Megaparsec (errorBundlePretty, parse)
 
 main :: IO ()
 main = do
-  handle <- openFile "/home/dogzik/script.sh" ReadMode
-  input <- hGetContents handle
-  case parse parseProgram "" input of
-    Left e -> print $ errorBundlePretty e
-    Right script -> do
-      code <- runScript script
-      print $ show code
+  mainArgs <- getArgs
+  case mainArgs of
+    [] -> print "Path to script and its arguments expected\n"
+    path:arguments -> do
+      handle <- openFile path ReadMode
+      input <- hGetContents handle
+      case parse parseProgram "" input of
+        Left e -> print $ errorBundlePretty e
+        Right script -> do
+          _ <- runScript script arguments
+          return ()
 
-runScript :: Program -> IO ExitCode
-runScript script = do
-  args <- getArgs
+runScript :: Program -> [String] -> IO ExitCode
+runScript script args = do
   let startPosArgs = PosArgs $ fromList $ zip [(1 :: Int) ..] args
   let startEnvVar = fromList []
   startDir <- getCurrentDirectory

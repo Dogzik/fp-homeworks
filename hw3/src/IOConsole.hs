@@ -8,7 +8,7 @@ module IOConsole
 
 import Control.Monad.Catch (SomeException (..), catch)
 import Control.Monad.Reader (MonadReader, ReaderT, ask, asks, local, runReaderT)
-import Control.Monad.State (MonadState, get, gets, modify, put)
+import Control.Monad.State (MonadState, get, put)
 import Control.Monad.Trans (lift)
 import Data.IORef (IORef, readIORef, writeIORef)
 import Enviroment (EnvState (..), MonadConsole (..), PosArgs)
@@ -16,7 +16,6 @@ import System.Directory (doesDirectoryExist)
 import System.Exit (ExitCode (..))
 import System.IO (hGetContents)
 import System.Process (StdStream (CreatePipe), createProcess, cwd, proc, std_out, waitForProcess)
-import Debug.Trace (trace)
 
 data MutableEnv = MutableEnv
   { mePosArgs  :: PosArgs
@@ -49,8 +48,8 @@ instance MonadReader PosArgs IOConsole where
   ask = IOConsole $ asks mePosArgs
   local f (IOConsole m) = IOConsole $ local (updPosArgs f) m
     where
-      updPosArgs f mEnv =
-        let newPosArgs = f $ mePosArgs mEnv
+      updPosArgs func mEnv =
+        let newPosArgs = func $ mePosArgs mEnv
          in mEnv {mePosArgs = newPosArgs}
 
 instance MonadState EnvState IOConsole where
@@ -75,29 +74,29 @@ instance MonadConsole IOConsole where
     IOConsole $
     lift (doWrite s `catch` (\(SomeException _) -> return $ ExitFailure 1))
     where
-      doWrite s = do
-        putStr s
+      doWrite s' = do
+        putStr s'
         return ExitSuccess
   directotyExists path = IOConsole $ lift $ doesDirectoryExist path
-  callExternal curDir exec args =
+  callExternal wd exec args =
     IOConsole $
     lift
-      (doCallExternal curDir exec args `catch`
-       (\(SomeException _) -> return $ ExitFailure 228))
+      (doCallExternal wd exec args `catch`
+       (\(SomeException _) -> return $ ExitFailure 1337))
     where
-      doCallExternal curDir exec args = do
-        let processInfo = (proc exec args) {cwd = Just curDir}
+      doCallExternal wd' exec' args' = do
+        let processInfo = (proc exec' args') {cwd = Just wd'}
         (_, _, _, procHandle) <- createProcess processInfo
         waitForProcess procHandle
-  callExternalWithOutput curDir exec args =
+  callExternalWithOutput wd exec args =
     IOConsole $
     lift
-      (doCallExternalWithOutput curDir exec args `catch`
-       (\(SomeException _) -> return (ExitFailure 228, "")))
+      (doCallExternalWithOutput wd exec args `catch`
+       (\(SomeException _) -> return (ExitFailure 282, "")))
     where
-      doCallExternalWithOutput curDir exec args = do
+      doCallExternalWithOutput wd' exec' args' = do
         let processInfo =
-              (proc exec args) {cwd = Just curDir, std_out = CreatePipe}
+              (proc exec' args') {cwd = Just wd', std_out = CreatePipe}
         (_, Just stdoutHandle, _, procHandle) <- createProcess processInfo
         code <- waitForProcess procHandle
         output <- hGetContents stdoutHandle

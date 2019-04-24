@@ -12,9 +12,9 @@ module Enviroment
   ) where
 
 import Control.Monad.Cont (ContT)
-import Control.Monad.Trans (MonadTrans, lift)
+import Control.Monad.Trans (lift)
 import Control.Monad.Writer (WriterT, writer, tell)
-import Data.Map.Strict (Map, findWithDefault, insert)
+import Data.Map.Strict (Map, findWithDefault)
 import System.Exit (ExitCode (..))
 
 newtype PosArgs =
