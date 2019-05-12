@@ -18,9 +18,12 @@ tested-with:         GHC == 8.0.1
 
 library
   hs-source-dirs:      src
-  exposed-modules:     Lib
-  ghc-options:         -Wall
+  exposed-modules:     Task1 Task2
+  ghc-options:         -Wall -threaded
   build-depends:       base >= 4.9 && < 5
+                     , deepseq
+                     , parallel
+                     , vector
   default-language:    Haskell2010
 
 executable hw4
@@ -29,6 +32,7 @@ executable hw4
   ghc-options:         -Wall -Werror -threaded -rtsopts -with-rtsopts=-N
   build-depends:       base
                      , hw4
+                     , random
   default-language:    Haskell2010
 
 test-suite hw4-test
@@ -37,5 +41,17 @@ test-suite hw4-test
   main-is:             Spec.hs
   build-depends:       base
                      , hw4
+  ghc-options:         -Wall -Werror -threaded -rtsopts -with-rtsopts=-N
+  default-language:    Haskell2010
+
+benchmark hw4-bench
+  type:                exitcode-stdio-1.0
+  hs-source-dirs:      bench
+  main-is:             Bench.hs
+  build-depends:       base
+                     , hw4
+                     , criterion
+                     , random
+                     , deepseq
   ghc-options:         -Wall -Werror -threaded -rtsopts -with-rtsopts=-N
   default-language:    Haskell2010
