@@ -18,12 +18,19 @@ tested-with:         GHC == 8.0.1
 
 library
   hs-source-dirs:      src
-  exposed-modules:     Task1 Task2
+  exposed-modules:     Task1 Task2 Task3 Task5
   ghc-options:         -Wall -threaded
   build-depends:       base >= 4.9 && < 5
                      , deepseq
                      , parallel
                      , vector
+                     , stm
+                     , stm-containers
+                     , mtl
+                     , focus
+                     , exceptions
+                     , list-t
+                     , deferred-folds
   default-language:    Haskell2010
 
 executable hw4
@@ -33,6 +40,7 @@ executable hw4
   build-depends:       base
                      , hw4
                      , random
+                     , mtl
   default-language:    Haskell2010
 
 test-suite hw4-test

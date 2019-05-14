@@ -1,21 +1,29 @@
 module Main where
 
--- import           Control.Monad (replicateM)
--- import           Data.List     (foldl')
-import           System.Random (newStdGen, randomRs)
+import           Control.Concurrent (forkIO, threadDelay)
+import           Control.Exception  (uninterruptibleMask_)
+import Task5 (runAllocateT, allocate, resourceFork)
+import Control.Monad.Trans (lift)
 
+--import           Control.Monad.Trans (lift)
 -- import qualified Task1         as T1
-import qualified Task2         as T2
-
-randomIntList :: Int -> Int -> Int -> IO [Int]
-randomIntList n from to = take n . randomRs (from, to) <$> newStdGen
+--import qualified Task5               as T5
+myFork :: IO () -> IO ()
+myFork act =
+  uninterruptibleMask_ $ do
+    _ <-
+      forkIO $ uninterruptibleMask_ $ do
+        threadDelay 1000000
+        act
+    return ()
 
 main :: IO ()
-main = do
-  let n = 10000000
-  xs <- randomIntList n 1 10
-  ys <- randomIntList n 1 10
-  let pairs = zip xs ys
-  let figure = map (uncurry T2.Point) pairs
-  let area = T2.doubleArea figure
-  print area
+main =
+  runAllocateT $ do
+    (_, _) <- allocate (putStrLn "A aquired") (\_ -> putStrLn "A released")
+    lift $ putStrLn "After a"
+    resourceFork
+      (\action -> () <$ forkIO action)
+      (allocate (putStrLn "C aquired") (\_ -> putStrLn "C released") >> lift (putStrLn "Finished helper thread"))
+    --lift $ threadDelay 1000000
+    lift $ putStrLn "finishing"
