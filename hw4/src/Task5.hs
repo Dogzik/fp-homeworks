@@ -118,11 +118,11 @@ release key =
     resourse <- getResourse
     case resourse of
       Nothing           -> return ()
-      Just (_, deleter) -> lift $ liftIO deleter
+      Just (_, deleter) -> liftIO deleter
   where
     getResourse = do
       envMap <- asks (resources . common)
-      lift $ liftIO $ atomically $ StmMap.focus Focus.lookupAndDelete key envMap
+      liftIO $ atomically $ StmMap.focus Focus.lookupAndDelete key envMap
 
 addElem :: IORef [a] -> a -> IO ()
 addElem list e = modifyIORef list (e :)
@@ -133,10 +133,11 @@ allocate ::
   -> (a -> IO ())
   -> AllocateT m (a, ResourceKey)
 allocate alloc delete = do
-  resource <- liftIO alloc
   ind <- asks (counter . common)
   envMap <- asks (resources . common)
-  mask_ $ action ind envMap resource `catchAll` handleError resource
+  mask_ $ do
+    resource <- liftIO alloc
+    action ind envMap resource `catchAll` handleError resource
   where
     nextIndState x =
       let next = succ x
@@ -144,13 +145,6 @@ allocate alloc delete = do
     handleError r e = do
       liftIO $ delete r
       throwM e
-    innerHandle key envMap e = do
-      liftIO $ atomically $ StmMap.delete key envMap
-      throwM e
-    innerAction resource key = do
-      myResourcesRef <- asks threadResources
-      lift $ liftIO $ addElem myResourcesRef key
-      return (resource, key)
     action ind envMap r = do
       (resource, key) <-
         liftIO $
@@ -158,7 +152,9 @@ allocate alloc delete = do
           newInd <- stateTVar ind nextIndState
           StmMap.insert (1, delete r) newInd envMap
           return (r, newInd)
-      innerAction resource key `catchAll` innerHandle key envMap
+      myResourcesRef <- asks threadResources
+      liftIO $ addElem myResourcesRef key
+      return (resource, key)
 
 tryAll :: (MonadCatch m) => m a -> m (Either SomeException a)
 tryAll act = (Right <$> act) `catchAll` (return . Left)
@@ -229,15 +225,24 @@ resourceFork fork (AllocateT act) = do
           let acquireFocus = Focus.adjust (\(c, d) -> (c + 1, d))
            in mapM_ (\key -> StmMap.focus acquireFocus key mapData) myResources
         return $ ThreadEnv commonData newResourcesRef newJointsRef
+    let clearAcquires =
+          liftIO $
+          atomically $
+          let acquireFocus = Focus.adjust (\(c, d) -> (c - 1, d))
+           in mapM_ (\key -> StmMap.focus acquireFocus key mapData) myResources
     myJointsRef <- asks threadJoints
-    childJoint <- liftIO newEmptyMVar
-    liftIO $ addElem myJointsRef childJoint
+    let jointM = do
+          childJoint <- liftIO newEmptyMVar
+          liftIO $ addElem myJointsRef childJoint
+          return childJoint
+    let handle e = clearAcquires >> throwM e
+    joint <- jointM `catchAll` handle
     let childFree = do
           env <- ask
           liftIO $ do
             joints <- readIORef (threadJoints env)
             forM_ joints (\x -> takeMVar x `catchAll` const (return ()))
           clearResources env
-          liftIO $ putMVar childJoint ()
+          liftIO $ putMVar joint ()
     let forkAction = act `finally` childFree
-    lift $ fork $ runReaderT forkAction newEnv
+    lift (fork $ runReaderT forkAction newEnv) `catchAll` handle
