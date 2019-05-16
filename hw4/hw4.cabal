@@ -31,6 +31,7 @@ library
                      , exceptions
                      , list-t
                      , deferred-folds
+                     , hashable
   default-language:    Haskell2010
 
 executable hw4

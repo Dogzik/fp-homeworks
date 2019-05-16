@@ -11,35 +11,58 @@ module Task5
   ) where
 
 import           Control.Applicative         (liftA2)
+import           Control.Concurrent.MVar     (MVar, newEmptyMVar, putMVar,
+                                              takeMVar)
 import           Control.Concurrent.STM.TVar (TVar, newTVar, stateTVar)
 import           Control.Monad               (forM_)
 import           Control.Monad.Catch         (MonadCatch, MonadMask, MonadThrow,
-                                              SomeException, bracket, catch,
-                                              catchAll, generalBracket, mask,
+                                              SomeException, catch, catchAll,
+                                              finally, generalBracket, mask,
                                               mask_, throwM,
                                               uninterruptibleMask)
-import           Control.Monad.Reader        (MonadReader, ReaderT (ReaderT),
-                                              ask, asks, local, runReaderT)
+import           Control.Monad.Reader        (MonadReader, ReaderT, ask, asks,
+                                              local, runReaderT)
 import           Control.Monad.STM           (atomically)
 import           Control.Monad.Trans         (MonadIO, MonadTrans, lift, liftIO)
 import           Data.Either                 (partitionEithers)
-import           Focus                       (adjust, lookupAndDelete)
-import           ListT                       (toList, traverse_)
+import           Data.Hashable               (Hashable, hashWithSalt)
+import           Data.IORef                  (IORef, modifyIORef, newIORef,
+                                              readIORef)
+import           Data.Maybe                  (catMaybes)
+import qualified Focus
 import           StmContainers.Map           (Map)
 import qualified StmContainers.Map           as StmMap
 
-type ResourceKey = Integer
+newtype ResourceKey =
+  ResourceKey Integer
 
-data Env =
-  Env
+instance Eq ResourceKey where
+  ResourceKey a == ResourceKey b = a == b
+
+instance Hashable ResourceKey where
+  hashWithSalt salt (ResourceKey a) = hashWithSalt salt a
+
+instance Enum ResourceKey where
+  toEnum x = ResourceKey $ toEnum x
+  fromEnum (ResourceKey x) = fromEnum x
+
+data CommonEnv =
+  CommonEnv
     { counter   :: TVar ResourceKey
     , resources :: Map ResourceKey (Int, IO ())
     }
 
-newtype AllocateT m a =
-  AllocateT (ReaderT Env m a)
+data ThreadEnv =
+  ThreadEnv
+    { common          :: CommonEnv
+    , threadResources :: IORef [ResourceKey]
+    , threadJoints    :: IORef [MVar ()]
+    }
 
-unpack :: AllocateT m a -> ReaderT Env m a
+newtype AllocateT m a =
+  AllocateT (ReaderT ThreadEnv m a)
+
+unpack :: AllocateT m a -> ReaderT ThreadEnv m a
 unpack (AllocateT x) = x
 
 instance (Monad m) => Functor (AllocateT m) where
@@ -61,7 +84,10 @@ instance (Monad m) => Monad (AllocateT m) where
 instance MonadTrans AllocateT where
   lift act = AllocateT $ lift act
 
-instance (Monad m) => MonadReader Env (AllocateT m) where
+instance (MonadIO m) => MonadIO (AllocateT m) where
+  liftIO act = AllocateT $ liftIO act
+
+instance (Monad m) => MonadReader ThreadEnv (AllocateT m) where
   ask = AllocateT ask
   local f (AllocateT monad) = AllocateT $ local f monad
 
@@ -95,40 +121,52 @@ release key =
       Just (_, deleter) -> lift $ liftIO deleter
   where
     getResourse = do
-      envMap <- asks resources
-      lift $ liftIO $ atomically $ StmMap.focus lookupAndDelete key envMap
+      envMap <- asks (resources . common)
+      lift $ liftIO $ atomically $ StmMap.focus Focus.lookupAndDelete key envMap
+
+addElem :: IORef [a] -> a -> IO ()
+addElem list e = modifyIORef list (e :)
 
 allocate ::
      (MonadIO m, MonadMask m)
   => IO a
   -> (a -> IO ())
   -> AllocateT m (a, ResourceKey)
-allocate alloc delete =
-  mask_ $ do
-    resource <- lift $ liftIO alloc
-    addResource resource `catchAll` handleError resource
+allocate alloc delete = do
+  resource <- liftIO alloc
+  ind <- asks (counter . common)
+  envMap <- asks (resources . common)
+  mask_ $ action ind envMap resource `catchAll` handleError resource
   where
     nextIndState x =
       let next = succ x
        in (next, next)
-    addResource r = do
-      ind <- asks counter
-      envMap <- asks resources
-      lift $
+    handleError r e = do
+      liftIO $ delete r
+      throwM e
+    innerHandle key envMap e = do
+      liftIO $ atomically $ StmMap.delete key envMap
+      throwM e
+    innerAction resource key = do
+      myResourcesRef <- asks threadResources
+      lift $ liftIO $ addElem myResourcesRef key
+      return (resource, key)
+    action ind envMap r = do
+      (resource, key) <-
         liftIO $
         atomically $ do
           newInd <- stateTVar ind nextIndState
           StmMap.insert (1, delete r) newInd envMap
           return (r, newInd)
-    handleError r e = do
-      lift $ liftIO $ delete r
-      throwM e
+      innerAction resource key `catchAll` innerHandle key envMap
 
 tryAll :: (MonadCatch m) => m a -> m (Either SomeException a)
 tryAll act = (Right <$> act) `catchAll` (return . Left)
 
-clearResources :: (MonadIO m, MonadCatch m) => Env -> m ()
-clearResources Env {resources = mapData} =
+clearResources :: (MonadIO m, MonadCatch m) => ThreadEnv -> m ()
+clearResources ThreadEnv { common = CommonEnv {resources = mapData}
+                         , threadResources = keysRef
+                         } =
   liftIO $ do
     deleters <- getDeleters
     results <- mapM tryAll deleters
@@ -136,45 +174,70 @@ clearResources Env {resources = mapData} =
       ([], _)  -> return ()
       (e:_, _) -> throwM e
   where
-    getDeleters =
+    getDeleters = do
+      keys <- readIORef keysRef
       atomically $ do
-        elems <- toList $ StmMap.listT mapData
-        let isUnique (_, (cnt, _)) = cnt == 1
-        let unique = map (snd . snd) (filter isUnique elems)
-        let getMeta (key, (cnt, _)) = (key, cnt)
-        let meta = map getMeta elems
-        let act (key, cnt) =
-              if cnt == 1
-                then StmMap.delete key mapData
-                else StmMap.focus (adjust (\(c, d) -> (c - 1, d))) key mapData
-        forM_ meta act
+        let uniqueFocus = do
+              t <- Focus.lookup
+              case t of
+                Just (1, d) -> return $ Just d
+                _           -> return Nothing
+        uniqueJusts <- mapM (\key -> StmMap.focus uniqueFocus key mapData) keys
+        let unique = catMaybes uniqueJusts
+        let updateFocus = do
+              t <- Focus.lookup
+              case t of
+                Nothing -> return ()
+                Just (c, d) ->
+                  if c == 1
+                    then Focus.delete
+                    else Focus.adjust $ const (c - 1, d)
+        mapM_ (\key -> StmMap.focus updateFocus key mapData) keys
         return unique
 
 runAllocateT :: (MonadIO m, MonadMask m) => AllocateT m a -> m a
-runAllocateT (AllocateT action) =
-  bracket createMap clearResources (runReaderT action)
-  where
-    createMap = liftIO $ atomically $ liftA2 Env (newTVar 0) StmMap.new
+runAllocateT (AllocateT action) = do
+  newCommon <-
+    liftIO $ atomically $ liftA2 CommonEnv (newTVar $ ResourceKey 0) StmMap.new
+  newResources <- liftIO $ newIORef []
+  newJoints <- liftIO $ newIORef []
+  let childFree = do
+        env <- ask
+        liftIO $ do
+          joints <- readIORef (threadJoints env)
+          forM_ joints (\x -> takeMVar x `catchAll` const (return ()))
+        clearResources env
+  let realAction = action `finally` childFree
+  runReaderT realAction $ ThreadEnv newCommon newResources newJoints
 
 resourceFork ::
      (MonadIO m, MonadMask m)
   => (m () -> m ())
   -> AllocateT m ()
   -> AllocateT m ()
-resourceFork fork (AllocateT act) =
-  AllocateT $ bracket updMap clearResources doFork
-  where
-    updMap = do
-      mapData <- asks resources
-      lift $
-        liftIO $
+resourceFork fork (AllocateT act) = do
+  myResourcesRef <- asks threadResources
+  commonData <- asks common
+  let mapData = resources commonData
+  myResources <- liftIO $ readIORef myResourcesRef
+  newResourcesRef <- liftIO $ newIORef myResources
+  newJointsRef <- liftIO $ newIORef []
+  mask_ $ do
+    newEnv <-
+      liftIO $ do
         atomically $
-        let listT = StmMap.listT mapData
-            actM (key, (_, _)) =
-              StmMap.focus (adjust (\(c, d) -> (c + 1, d))) key mapData
-         in traverse_ actM listT
-      ask
-    doFork env =
-      ReaderT $ \_ ->
-        let newAct = runReaderT act env
-         in fork newAct
+          let acquireFocus = Focus.adjust (\(c, d) -> (c + 1, d))
+           in mapM_ (\key -> StmMap.focus acquireFocus key mapData) myResources
+        return $ ThreadEnv commonData newResourcesRef newJointsRef
+    myJointsRef <- asks threadJoints
+    childJoint <- liftIO newEmptyMVar
+    liftIO $ addElem myJointsRef childJoint
+    let childFree = do
+          env <- ask
+          liftIO $ do
+            joints <- readIORef (threadJoints env)
+            forM_ joints (\x -> takeMVar x `catchAll` const (return ()))
+          clearResources env
+          liftIO $ putMVar childJoint ()
+    let forkAction = act `finally` childFree
+    lift $ fork $ runReaderT forkAction newEnv

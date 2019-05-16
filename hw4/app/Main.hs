@@ -1,9 +1,9 @@
 module Main where
 
-import           Control.Concurrent (forkIO, threadDelay)
-import           Control.Exception  (uninterruptibleMask_)
-import Task5 (runAllocateT, allocate, resourceFork)
-import Control.Monad.Trans (lift)
+import           Control.Concurrent  (forkIO, threadDelay)
+import           Control.Exception   (uninterruptibleMask_)
+import           Control.Monad.Trans (lift)
+import           Task5               (allocate, resourceFork, runAllocateT)
 
 --import           Control.Monad.Trans (lift)
 -- import qualified Task1         as T1
@@ -12,7 +12,8 @@ myFork :: IO () -> IO ()
 myFork act =
   uninterruptibleMask_ $ do
     _ <-
-      forkIO $ uninterruptibleMask_ $ do
+      forkIO $
+      uninterruptibleMask_ $ do
         threadDelay 1000000
         act
     return ()
@@ -24,6 +25,9 @@ main =
     lift $ putStrLn "After a"
     resourceFork
       (\action -> () <$ forkIO action)
-      (allocate (putStrLn "C aquired") (\_ -> putStrLn "C released") >> lift (putStrLn "Finished helper thread"))
-    --lift $ threadDelay 1000000
+      (allocate (putStrLn "C aquired") (\_ -> putStrLn "C released") >>
+      --  (lift $ threadDelay 1000000) >>
+       (error "BLYAAAAA") >>
+       lift (putStrLn "Finished helper thread"))
+    lift $ threadDelay 1000000
     lift $ putStrLn "finishing"
