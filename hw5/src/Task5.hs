@@ -1,14 +1,18 @@
-{-# LANGUAGE Rank2Types    #-}
-{-# LANGUAGE TupleSections #-}
+{-# LANGUAGE Rank2Types          #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TupleSections       #-}
 
 module Task5
   ( Lens
   , Lens'
   , (%~)
   , (.~)
+  , (<%~)
+  , (<<%~)
   , (^.)
   , _1
   , _2
+  , choosing
   , lens
   , over
   , set
@@ -23,9 +27,6 @@ type Lens s t a b
                  (a -> f b) -> s -> f t
 
 type Lens' s a = Lens s s a a
-
-lens :: (s -> a) -> (s -> b -> t) -> Lens s t a b
-lens getter setter f s = setter s <$> f (getter s)
 
 view :: Lens' s a -> s -> a
 view l e = getConst $ l Const e
@@ -50,3 +51,21 @@ _1 func (f, s) = (, s) <$> func f
 
 _2 :: Lens (x, a) (x, b) a b
 _2 func (f, s) = (f, ) <$> func s
+
+lens :: (s -> a) -> (s -> b -> t) -> Lens s t a b
+lens getter setter f s = setter s <$> f (getter s)
+
+choosing ::
+     Lens s1 t1 a b -> Lens s2 t2 a b -> Lens (Either s1 s2) (Either t1 t2) a b
+choosing l1 _ func (Left x)  = Left <$> l1 func x
+choosing _ l2 func (Right y) = Right <$> l2 func y
+
+(<%~) :: forall s t a b. Lens s t a b -> (a -> b) -> s -> (b, t)
+(<%~) l func = l (duplicate . func)
+  where
+    duplicate x = (x, x)
+
+(<<%~) :: Lens s t a b -> (a -> b) -> s -> (a, t)
+(<<%~) l func = l addRes
+  where
+    addRes x = (x, func x)
