@@ -9,6 +9,7 @@ import           System.Directory  (doesDirectoryExist, doesFileExist,
                                     listDirectory, pathIsSymbolicLink)
 
 import           System.FilePath   (splitDirectories, takeFileName, (</>))
+import           System.IO.Error   (ioError, userError)
 
 data FS
   = Dir
@@ -41,17 +42,21 @@ isGood p = do
   file <- isFile p
   return $! dir || file
 
-listHandle :: SomeException -> IO [FilePath]
-listHandle = const $ return []
+simpleListingHandle :: SomeException -> IO [FilePath]
+simpleListingHandle = const $ return []
 
 getDirName :: FilePath -> FilePath
 getDirName path = last $ splitDirectories path
 
 scanDirectory :: FilePath -> IO FS
-scanDirectory path = Dir (getDirName path) <$> getContent path
+scanDirectory path = do
+  dir <- isDir path
+  if not dir
+    then ioError $ userError "No such directory"
+    else Dir (getDirName path) <$> getContent path
   where
     getContent p = do
-      elems <- listDirectory p
+      elems <- listDirectory p `catch` simpleListingHandle
       let content = map (p </>) elems
       goodContent <- filterM isGood content
       forM goodContent $ \child -> do
