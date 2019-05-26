@@ -18,9 +18,20 @@ tested-with:         GHC == 8.0.1
 
 library
   hs-source-dirs:      src
-  exposed-modules:     Task5
+  exposed-modules:     Task5 Task6
   ghc-options:         -Wall
   build-depends:       base >= 4.9 && < 5
+                     , microlens
+                     , directory
+                     , filepath
+  default-language:    Haskell2010
+
+executable hw5
+  hs-source-dirs:      app
+  main-is:             Main.hs
+  ghc-options:         -Wall -Werror -threaded -rtsopts -with-rtsopts=-N
+  build-depends:       base
+                     , hw5
   default-language:    Haskell2010
 
 test-suite hw5-test
