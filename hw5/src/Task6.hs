@@ -1,5 +1,9 @@
 module Task6
   ( FS(..)
+  , dirContents
+  , dirName
+  , fileName
+  , fsName
   , scanDirectory
   ) where
 
@@ -8,6 +12,7 @@ import           Control.Monad     (filterM, forM)
 import           System.Directory  (doesDirectoryExist, doesFileExist,
                                     listDirectory, pathIsSymbolicLink)
 
+import           Lens.Micro        (Lens', Traversal', lens)
 import           System.FilePath   (splitDirectories, takeFileName, (</>))
 import           System.IO.Error   (ioError, userError)
 
@@ -64,3 +69,22 @@ scanDirectory path = do
         if file
           then return $ File $ takeFileName child
           else Dir (getDirName child) <$> getContent child
+
+fsName :: Lens' FS FilePath
+fsName = lens getName setName
+  where
+    getName = name
+    setName tree newName = tree {name = newName}
+
+dirName :: Traversal' FS FilePath
+dirName f fs@Dir {name = x} = (\newName -> fs {name = newName}) <$> f x
+dirName _ fs                = pure fs
+
+fileName :: Traversal' FS FilePath
+fileName f (File x) = File <$> f x
+fileName _ fs       = pure fs
+
+dirContents :: Traversal' FS [FS]
+dirContents f fs@Dir {contents = x} =
+  (\newContents -> fs {contents = newContents}) <$> f x
+dirContents _ fs = pure fs
