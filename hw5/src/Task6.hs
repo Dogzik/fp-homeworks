@@ -48,7 +48,7 @@ isGood p = do
   return $! dir || file
 
 simpleListingHandle :: SomeException -> IO [FilePath]
-simpleListingHandle = const $ return []
+simpleListingHandle _ = pure []
 
 getDirName :: FilePath -> FilePath
 getDirName path = last $ splitDirectories path
@@ -88,3 +88,4 @@ dirContents :: Traversal' FS [FS]
 dirContents f fs@Dir {contents = x} =
   (\newContents -> fs {contents = newContents}) <$> f x
 dirContents _ fs = pure fs
+ 

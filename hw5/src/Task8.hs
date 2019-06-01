@@ -1,15 +1,21 @@
+{-# LANGUAGE Rank2Types #-}
+
 module Task8
   ( changeExtention
   , listContentRecursive
   , listFilesRecursive
   , removeIfEmpty
+  , move
+  , getPath
   ) where
 
 import           Data.Maybe      (isJust)
-import           Lens.Micro      (Traversal', failing, filtered, traversed,
-                                  (%~), (&), (^.), (^..), (^?))
-import           System.FilePath (replaceExtension)
-import           Task6           (FS, dirContents, dirName, fileName, fsName)
+import           Lens.Micro      (SimpleGetter, Traversal', failing, filtered,
+                                  to, traversed, (%~), (&), (^.), (^..), (^?))
+import           System.FilePath (addTrailingPathSeparator, replaceExtension,
+                                  (</>))
+import           Task6           (FS (..), dirContents, dirName, fileName,
+                                  fsName)
 
 changeExtention :: String -> FS -> FS
 changeExtention newExt dir =
@@ -35,3 +41,17 @@ removeIfEmpty dir fs = fs & dirContents %~ filterEmptyDirs
           f2 = e ^? dirContents . filtered null
        in isJust f1 && isJust f2
     filterEmptyDirs = filter (not . emptyDir)
+
+-- technically this is not valid traversal because it violates the laws
+move :: FilePath -> Traversal' FS FS
+move path f fs@(Dir dirname elems) =
+  let targets = elems ^.. traversed . filtered ((== path) . (^. fsName))
+      updTargets = targets & traversed . fsName %~ (dirname </>)
+   in (dirContents . traversed) f (fs {contents = updTargets})
+move _ _ fs = pure fs
+
+getPath :: SimpleGetter FS FilePath
+getPath = to pathGetter
+  where
+    pathGetter Dir {name = dirname} = addTrailingPathSeparator dirname
+    pathGetter (File filename)      = filename
