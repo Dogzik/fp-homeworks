@@ -10,8 +10,9 @@ module Task8
   ) where
 
 import           Data.Maybe      (isJust)
-import           Lens.Micro      (SimpleGetter, Traversal', failing, filtered,
-                                  to, traversed, (%~), (&), (^.), (^..), (^?))
+import           Lens.Micro      (SimpleFold, SimpleGetter, Traversal', failing,
+                                  filtered, to, traversed, (%~), (&), (^.),
+                                  (^..), (^?))
 import           System.FilePath (addTrailingPathSeparator, replaceExtension,
                                   (</>))
 import           Task6           (FS (..), dirContents, dirName, fileName,
@@ -42,8 +43,7 @@ removeIfEmpty dir fs = fs & dirContents %~ filterEmptyDirs
        in isJust f1 && isJust f2
     filterEmptyDirs = filter (not . emptyDir)
 
--- technically this is not valid traversal because it violates the laws
-move :: FilePath -> Traversal' FS FS
+move :: FilePath -> SimpleFold FS FS
 move path f fs@(Dir dirname elems) =
   let targets = elems ^.. traversed . filtered ((== path) . (^. fsName))
       updTargets = targets & traversed . fsName %~ (dirname </>)
