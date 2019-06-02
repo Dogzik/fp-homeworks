@@ -1,20 +1,23 @@
 module Task6
   ( FS(..)
+  , childrenSubtrees
   , dirContents
   , dirName
   , fileName
   , fsName
   , scanDirectory
+  , subtree
   ) where
 
-import           Control.Exception (SomeException, catch)
-import           Control.Monad     (filterM, forM)
-import           System.Directory  (doesDirectoryExist, doesFileExist,
-                                    listDirectory, pathIsSymbolicLink)
+import           Control.Applicative (liftA2)
+import           Control.Exception   (SomeException, catch)
+import           Control.Monad       (filterM, forM)
+import           System.Directory    (doesDirectoryExist, doesFileExist,
+                                      listDirectory, pathIsSymbolicLink)
 
-import           Lens.Micro        (Lens', Traversal', lens)
-import           System.FilePath   (splitDirectories, takeFileName, (</>))
-import           System.IO.Error   (ioError, userError)
+import           Lens.Micro          (Lens', Traversal', lens)
+import           System.FilePath     (splitDirectories, takeFileName, (</>))
+import           System.IO.Error     (ioError, userError)
 
 data FS
   = Dir
@@ -88,4 +91,13 @@ dirContents :: Traversal' FS [FS]
 dirContents f fs@Dir {contents = x} =
   (\newContents -> fs {contents = newContents}) <$> f x
 dirContents _ fs = pure fs
- 
+
+subtree :: Traversal' FS FilePath
+subtree f (Dir dirname dircontent) =
+  liftA2 Dir (f dirname) (traverse (subtree f) dircontent)
+subtree f (File filename) = File <$> f filename
+
+childrenSubtrees :: Traversal' FS FilePath
+childrenSubtrees f (Dir dirname dircontent) =
+  Dir dirname <$> traverse (subtree f) dircontent
+childrenSubtrees _ fs = pure fs

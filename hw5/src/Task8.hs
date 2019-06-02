@@ -2,11 +2,12 @@
 
 module Task8
   ( changeExtention
-  , listContentRecursive
-  , listFilesRecursive
-  , removeIfEmpty
-  , move
   , getPath
+  , listContentRecursive
+  , listDirContentRecursively
+  , listFilesRecursive
+  , move
+  , removeIfEmpty
   ) where
 
 import           Data.Maybe      (isJust)
@@ -15,8 +16,8 @@ import           Lens.Micro      (SimpleFold, SimpleGetter, Traversal', failing,
                                   (^..), (^?))
 import           System.FilePath (addTrailingPathSeparator, replaceExtension,
                                   (</>))
-import           Task6           (FS (..), dirContents, dirName, fileName,
-                                  fsName)
+import           Task6           (FS (..), childrenSubtrees, dirContents,
+                                  dirName, fileName, fsName, subtree)
 
 changeExtention :: String -> FS -> FS
 changeExtention newExt dir =
@@ -29,10 +30,10 @@ listFilesRecursive fs = fs ^.. failing fileName listDir
     listDir = dirContents . traversed . failing fileName listDir
 
 listContentRecursive :: FS -> [FilePath]
-listContentRecursive fs =
-  let curName = fs ^. fsName
-      children = concatMap listContentRecursive (fs ^.. dirContents . traversed)
-   in curName : children
+listContentRecursive fs = fs ^.. subtree
+
+listDirContentRecursively :: FS -> [FilePath]
+listDirContentRecursively fs = fs ^.. childrenSubtrees
 
 removeIfEmpty :: FilePath -> FS -> FS
 removeIfEmpty dir fs = fs & dirContents %~ filterEmptyDirs
