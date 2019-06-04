@@ -11,13 +11,13 @@ module Task2
   , Val(..)
   , VarJS(..)
   , ToVal(..)
+  , dummyCeilHalf
+  , dummyCheckerJS
+  , dummyJS
+  , half20JS
+  , idJS
   , runSTJS
   , runSTJS1
-  -- , f1
-  -- , f2
-  -- , f3
-  -- , f4
-  -- , f5
   ) where
 
 import           Control.Applicative (liftA2)
@@ -168,6 +168,7 @@ class Monad m =>
   sReadVar :: m (Var m Val) -> m Val
   sIf :: m Bool -> m () -> m () -> m ()
   sFun1 :: (m Val -> m (Var m Val) -> m ()) -> m Val -> m Val
+  sFun2 :: (m Val -> m Val -> m (Var m Val) -> m ()) -> m Val -> m Val -> m Val
   sWhile :: m Bool -> m () -> m ()
 
 class VarJS a where
@@ -222,6 +223,7 @@ instance MonadJS (ST s) s where
     resRef <- newSTRef Undefined
     cont arg $ return resRef
     readSTRef resRef
+  sFun2 cont arg1 = sFun1 (cont arg1)
   sWhile cond body = do
     flag <- cond
     when flag $ body >> sWhile cond body
@@ -250,34 +252,34 @@ runSTJS = runST
 runSTJS1 :: ToVal a => a -> (forall s. ST s Val -> ST s Val) -> Val
 runSTJS1 x script = runST $ script (return $ toVal x)
 
--- f1 :: MonadJS m s => m Val -> m Val
--- f1 = sFun1 $ \a res -> res @=@ a
+idJS :: MonadJS m s => m Val -> m Val
+idJS = sFun1 $ \a res -> res @=@ a
 
--- f2 :: MonadJS m s => m ()
--- f2 = sWithVar (toVal "keke") $ \x -> x @= toVal False
+dummyJS :: MonadJS m s => m ()
+dummyJS = sWithVar (toVal "keke") $ \x -> x @= toVal False
 
--- f3 :: MonadJS m s => m Val -> m Val
--- f3 =
---   sFun1 $ \x res ->
---     sWithVar (2 :: Int) $ \y ->
---       sIf (sReadVar y @>@ x) (res @=@ x) (res @= toVal "Ochen zhal")
+dummyCheckerJS :: MonadJS m s => m Val -> m Val
+dummyCheckerJS =
+  sFun1 $ \x res ->
+    sWithVar (2 :: Int) $ \y ->
+      sIf (sReadVar y @>@ x) (res @=@ x) (res @= toVal "Ochen zhal")
 
--- f4 :: MonadJS m s => m Val -> m Val
--- f4 =
---   sFun1 $ \x res ->
---     sWithVar (0 :: Int) $ \l ->
---       sWithVar (0 :: Int) $ \r ->
---         r @=@ x #
---         sWithVar
---           (1 :: Int)
---           (\one ->
---              sWhile
---                (x @>@ sReadVar l @+@ sReadVar l)
---                (l @=@ sReadVar l @+@ sReadVar one) #
---              (res @=@ sReadVar l))
+dummyCeilHalf :: MonadJS m s => m Val -> m Val
+dummyCeilHalf =
+  sFun1 $ \x res ->
+    sWithVar (0 :: Int) $ \l ->
+      sWithVar (0 :: Int) $ \r ->
+        r @=@ x #
+        sWithVar
+          (1 :: Int)
+          (\one ->
+             sWhile
+               (x @>@ sReadVar l @+@ sReadVar l)
+               (l @=@ sReadVar l @+@ sReadVar one) #
+             (res @=@ sReadVar l))
 
--- f5 :: MonadJS m s => m Val -> m Val
--- f5 =
---   sFun1 $ \x res ->
---     sWithVar "Wow" $ \y ->
---       y @=@ x @+@ return (toVal (20 :: Int)) # res @=@ f4 (sReadVar y)
+half20JS :: MonadJS m s => m Val -> m Val
+half20JS =
+  sFun1 $ \x res ->
+    sWithVar "Wow" $ \y ->
+      y @=@ x @+@ liftPure (20 :: Int) # res @=@ dummyCeilHalf (sReadVar y)
