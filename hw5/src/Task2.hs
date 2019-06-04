@@ -13,11 +13,11 @@ module Task2
   , ToVal(..)
   , runSTJS
   , runSTJS1
-  , f1
-  , f2
-  , f3
-  , f4
-  , f5
+  -- , f1
+  -- , f2
+  -- , f3
+  -- , f4
+  -- , f5
   ) where
 
 import           Control.Applicative (liftA2)
@@ -159,8 +159,8 @@ class Monad m =>
   writeVar :: Var m a -> a -> m ()
   infixl 7 @>@
   (@>@) :: m Val -> m Val -> m Bool
-  infixl 5 @#
-  (@#) :: m () -> m a -> m a
+  infixl 5 #
+  (#) :: m () -> m a -> m a
   infixl 8 @+@
   (@+@) :: m Val -> m Val -> m Val
   infixl 8 @-@
@@ -177,16 +177,37 @@ class Monad m =>
   sWhile :: m Bool -> m () -> m ()
 
 class VarJS a where
+  liftPure :: MonadJS m s => a -> m Val
   sWithVar :: MonadJS m s => a -> (m (Var m Val) -> m ()) -> m ()
+  sWithVar x cont = do
+    val <- liftPure x
+    ref <- newVar val
+    cont (return ref)
   infix 6 @=
   (@=) :: MonadJS m s => m (Var m Val) -> a -> m ()
+  (@=) mRef x = mRef @=@ liftPure x
+  infixl 8 @+
+  (@+) :: MonadJS m s => m Val -> a -> m Val
+  (@+) mX y = mX @+@ liftPure y
+  infixl 8 @-
+  (@-) :: MonadJS m s => m Val -> a -> m Val
+  (@-) mX y = mX @-@ liftPure y
+  infixl 9 @*
+  (@*) :: MonadJS m s => m Val -> a -> m Val
+  (@*) mX y = mX @*@ liftPure y
+  infixr 9 @/
+  (@/) :: MonadJS m s => m Val -> a -> m Val
+  (@/) mX y = mX @/@ liftPure y
+  infixl 7 @>
+  (@>) :: MonadJS m s => m Val -> a -> m Bool
+  (@>) mX y = mX @>@ liftPure y
 
 instance MonadJS (ST s) s where
   type Var (ST s) a = STRef s a
   newVar = newSTRef
   writeVar = writeSTRef
   (@>@) = liftA2 greater
-  (@#) = (>>)
+  (#) = (>>)
   (@+@) = liftA2 addJS
   (@-@) = liftA2 subJS
   (@*@) = liftA2 mulJS
@@ -212,35 +233,22 @@ instance MonadJS (ST s) s where
     when flag $ body >> sWhile cond body
 
 instance VarJS Val where
-  sWithVar x cont = do
-    ref <- newVar x
-    cont (return ref)
-  (@=) mRef x = do
-    ref <- mRef
-    writeVar ref x
+  liftPure = return
 
-sWithVarGeneric ::
-     (MonadJS m s, ToVal a) => a -> (m (Var m Val) -> m ()) -> m ()
-sWithVarGeneric x = sWithVar $ toVal x
-
-assignGeneric :: (MonadJS m s, ToVal a) => m (Var m Val) -> a -> m ()
-assignGeneric mRef x = mRef @= toVal x
+liftPureGeneric :: (MonadJS m s, ToVal a) => a -> m Val
+liftPureGeneric = liftPure . toVal
 
 instance VarJS Int where
-  sWithVar = sWithVarGeneric
-  (@=) = assignGeneric
+  liftPure = liftPureGeneric
 
 instance VarJS Double where
-  sWithVar = sWithVarGeneric
-  (@=) = assignGeneric
+  liftPure = liftPureGeneric
 
 instance VarJS Bool where
-  sWithVar = sWithVarGeneric
-  (@=) = assignGeneric
+  liftPure = liftPureGeneric
 
 instance VarJS String where
-  sWithVar = sWithVarGeneric
-  (@=) = assignGeneric
+  liftPure = liftPureGeneric
 
 runSTJS :: (forall s. ST s ()) -> ()
 runSTJS = runST
@@ -248,34 +256,34 @@ runSTJS = runST
 runSTJS1 :: ToVal a => a -> (forall s. ST s Val -> ST s Val) -> Val
 runSTJS1 x script = runST $ script (return $ toVal x)
 
-f1 :: MonadJS m s => m Val -> m Val
-f1 = sFun1 $ \a res -> res @=@ a
+-- f1 :: MonadJS m s => m Val -> m Val
+-- f1 = sFun1 $ \a res -> res @=@ a
 
-f2 :: MonadJS m s => m ()
-f2 = sWithVar (toVal "keke") $ \x -> x @= toVal False
+-- f2 :: MonadJS m s => m ()
+-- f2 = sWithVar (toVal "keke") $ \x -> x @= toVal False
 
-f3 :: MonadJS m s => m Val -> m Val
-f3 =
-  sFun1 $ \x res ->
-    sWithVar (2 :: Int) $ \y ->
-      sIf (sReadVar y @>@ x) (res @=@ x) (res @= toVal "Ochen zhal")
+-- f3 :: MonadJS m s => m Val -> m Val
+-- f3 =
+--   sFun1 $ \x res ->
+--     sWithVar (2 :: Int) $ \y ->
+--       sIf (sReadVar y @>@ x) (res @=@ x) (res @= toVal "Ochen zhal")
 
-f4 :: MonadJS m s => m Val -> m Val
-f4 =
-  sFun1 $ \x res ->
-    sWithVar (0 :: Int) $ \l ->
-      sWithVar (0 :: Int) $ \r ->
-        r @=@ x @#
-        sWithVar
-          (1 :: Int)
-          (\one ->
-             sWhile
-               (x @>@ sReadVar l @+@ sReadVar l)
-               (l @=@ sReadVar l @+@ sReadVar one) @#
-             (res @=@ sReadVar l))
+-- f4 :: MonadJS m s => m Val -> m Val
+-- f4 =
+--   sFun1 $ \x res ->
+--     sWithVar (0 :: Int) $ \l ->
+--       sWithVar (0 :: Int) $ \r ->
+--         r @=@ x #
+--         sWithVar
+--           (1 :: Int)
+--           (\one ->
+--              sWhile
+--                (x @>@ sReadVar l @+@ sReadVar l)
+--                (l @=@ sReadVar l @+@ sReadVar one) #
+--              (res @=@ sReadVar l))
 
-f5 :: MonadJS m s => m Val -> m Val
-f5 =
-  sFun1 $ \x res ->
-    sWithVar "Wow" $ \y ->
-      y @=@ x @+@ return (toVal (20 :: Int)) @# res @=@ f4 (sReadVar y)
+-- f5 :: MonadJS m s => m Val -> m Val
+-- f5 =
+--   sFun1 $ \x res ->
+--     sWithVar "Wow" $ \y ->
+--       y @=@ x @+@ return (toVal (20 :: Int)) # res @=@ f4 (sReadVar y)
