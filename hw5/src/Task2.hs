@@ -29,19 +29,13 @@ import           Data.STRef          (STRef, newSTRef, readSTRef, writeSTRef)
 data Number
   = Inter Int
   | Frac Double
-  deriving (Show)
+  deriving (Show, Eq)
 
 instance Semigroup Number where
   Inter x <> Inter y = Inter $ x + y
   Frac x <> Frac y = Frac $ x + y
   Frac x <> Inter y = Frac $ x + fromIntegral y
   a <> b = b <> a
-
-instance Eq Number where
-  Inter x == Inter y = x == y
-  Frac x == Frac y = x == y
-  Inter x == Frac y = fromIntegral x == y
-  x == y = y == x
 
 instance Ord Number where
   Inter x <= Inter y = x <= y
@@ -71,7 +65,7 @@ data Val
   | Str String
   | Numb Number
   | Undefined
-  deriving (Show)
+  deriving (Show, Eq)
 
 addJS :: Val -> Val -> Val
 addJS Undefined _ = Undefined

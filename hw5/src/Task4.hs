@@ -9,9 +9,12 @@ import           Task2 (MonadJS (..), Val(..), VarJS (..))
 sqrtIntJS :: MonadJS m s => m Val -> m Val
 sqrtIntJS =
   sFun1 $ \x res ->
-    sWithVar (0 :: Int) $ \l ->
+    sIf 
+      (liftPure (0 :: Int) @>@ x) 
+      (res @= (0 :: Int))
+    (sWithVar (0 :: Int) $ \l ->
       sWithVar (0 :: Int) $ \r ->
-          r @=@ x #
+          r @=@ x @+ (1 :: Int) #
           sWhile
              (sReadVar r @-@ sReadVar l @> (1 :: Int))
              (sWithVar Undefined $ \m ->
@@ -22,7 +25,7 @@ sqrtIntJS =
                   (l @=@ sReadVar m)
               ) #
           res @=@ sReadVar l
-
+    )
 
 fibJS :: MonadJS m s => m Val -> m Val
 fibJS = sFun1 $ \n res ->
