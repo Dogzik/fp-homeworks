@@ -1,6 +1,7 @@
 module Task4
   ( sqrtIntJS
   , fibJS
+  , factJS
   ) where
 
 import           Task2 (MonadJS (..), Val(..), VarJS (..))
@@ -38,4 +39,16 @@ fibJS = sFun1 $ \n res ->
                     cur @=@ sReadVar cur @+ (1 :: Int)
                   ))
 
-
+factJS :: MonadJS m s => m Val -> m Val
+factJS = sFun1 $ \n res ->
+          res @= (1 :: Int) #
+          sWithVar Undefined (\cur ->
+            cur @=@ n #
+            sWhile
+              (sReadVar cur @> (1 :: Int))
+              (
+                res @=@ sReadVar res @*@ sReadVar cur #
+                cur @=@ sReadVar cur @- (1 :: Int)
+              )
+          )
+          
