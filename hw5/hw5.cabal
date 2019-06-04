@@ -18,7 +18,7 @@ tested-with:         GHC == 8.0.1
 
 library
   hs-source-dirs:      src
-  exposed-modules:     Task2 Task5 Task6 Task7 Task8
+  exposed-modules:     Task2 Task4 Task5 Task6 Task7 Task8
   ghc-options:         -Wall
   build-depends:       base >= 4.9 && < 5
                      , microlens

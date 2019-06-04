@@ -7,13 +7,17 @@
 
 module Task2
   ( MonadJS(..)
+  , Number(..)
+  , Val(..)
   , VarJS(..)
+  , ToVal(..)
   , runSTJS
   , runSTJS1
   , f1
   , f2
   , f3
   , f4
+  , f5
   ) where
 
 import           Control.Applicative (liftA2)
@@ -66,19 +70,64 @@ data Val
   = Boolean Bool
   | Str String
   | Numb Number
+  | Undefined
   deriving (Show)
 
-add :: Val -> Val -> Val
-add (Boolean a) (Boolean b) = Boolean $ a || b
-add (Str a) (Str b)         = Str $ a <> b
-add (Numb a) (Numb b)       = Numb $ a + b
-add _ _                     = Str mempty
+addJS :: Val -> Val -> Val
+addJS Undefined _ = Undefined
+addJS (Boolean a) (Boolean b) = Boolean $ a || b
+addJS (Boolean a) (Numb b) = Numb $ b + Inter (fromEnum a)
+addJS (Boolean a) (Str b) = Str $ show a ++ b
+addJS (Numb a) (Numb b) = Numb $ a + b
+addJS (Numb a) (Str b) =
+  case a of
+    Inter x -> Str $ show x ++ b
+    Frac y  -> Str $ show y ++ b
+addJS (Str a) (Str b) = Str $ a <> b
+addJS a b = addJS b a
 
-sub :: Val -> Val -> Val
-sub (Boolean a) (Boolean b) = Boolean $ (a || b) && (not a || not b) --xor
-sub (Str a) (Str b)         = Str $ b <> a
-sub (Numb a) (Numb b)       = Numb $ a - b
-sub _ _                     = Str mempty
+subJS :: Val -> Val -> Val
+subJS Undefined _             = Undefined
+subJS _ Undefined             = Undefined
+subJS (Boolean a) (Boolean b) = Boolean $ (a || b) && (not a || not b) --xor
+subJS (Str _) (Str _)         = Str mempty
+subJS (Numb a) (Numb b)       = Numb $ a - b
+subJS _ _                     = Str mempty
+
+mulJS :: Val -> Val -> Val
+mulJS Undefined _ = Undefined
+mulJS (Boolean a) (Boolean b) = Boolean $ a && b
+mulJS (Boolean a) b@(Numb _) =
+  if a
+    then b
+    else Numb $ Inter 0
+mulJS (Boolean a) b@(Str _) =
+  if a
+    then b
+    else Str mempty
+mulJS (Numb a) (Numb b) = Numb $ a * b
+mulJS (Numb a) (Str b) =
+  case a of
+    Inter x -> Str $ concatMap (const b) $ replicate x []
+    Frac y  -> Str $ concatMap (const b) $ replicate (floor y) []
+mulJS (Str a) (Str b) = Str $ concat $ map (:) a <*> map pure b
+mulJS a b = mulJS b a
+
+divJS :: Val -> Val -> Val
+divJS Undefined _ = Undefined
+divJS _ Undefined = Undefined
+divJS (Boolean a) (Boolean b) = Boolean $ not a && b
+divJS (Numb a) (Numb b) =
+  case a of
+    Inter x ->
+      case b of
+        Inter y -> Numb $ Inter $ x `div` y
+        Frac z  -> Numb $ Inter $ floor $ fromIntegral x / z
+    Frac x ->
+      case b of
+        Inter y -> Numb $ Inter $ floor $ x / fromIntegral y
+        Frac z  -> Numb $ Inter $ floor $ x / z
+divJS _ _ = Undefined
 
 greater :: Val -> Val -> Bool
 greater (Boolean a) (Boolean b) = a > b
@@ -108,10 +157,19 @@ class Monad m =>
   type Var m a :: *
   newVar :: a -> m (Var m a)
   writeVar :: Var m a -> a -> m ()
+  infixl 7 @>@
   (@>@) :: m Val -> m Val -> m Bool
+  infixl 5 @#
   (@#) :: m () -> m a -> m a
+  infixl 8 @+@
   (@+@) :: m Val -> m Val -> m Val
+  infixl 8 @-@
   (@-@) :: m Val -> m Val -> m Val
+  infixl 9 @*@
+  (@*@) :: m Val -> m Val -> m Val
+  infixr 9 @/@
+  (@/@) :: m Val -> m Val -> m Val
+  infix 6 @=@
   (@=@) :: m (Var m Val) -> m Val -> m ()
   sReadVar :: m (Var m Val) -> m Val
   sIf :: m Bool -> m () -> m () -> m ()
@@ -120,6 +178,7 @@ class Monad m =>
 
 class VarJS a where
   sWithVar :: MonadJS m s => a -> (m (Var m Val) -> m ()) -> m ()
+  infix 6 @=
   (@=) :: MonadJS m s => m (Var m Val) -> a -> m ()
 
 instance MonadJS (ST s) s where
@@ -128,8 +187,10 @@ instance MonadJS (ST s) s where
   writeVar = writeSTRef
   (@>@) = liftA2 greater
   (@#) = (>>)
-  (@+@) = liftA2 add
-  (@-@) = liftA2 sub
+  (@+@) = liftA2 addJS
+  (@-@) = liftA2 subJS
+  (@*@) = liftA2 mulJS
+  (@/@) = liftA2 divJS
   (@=@) mRef mX = do
     x <- mX
     ref <- mRef
@@ -143,7 +204,7 @@ instance MonadJS (ST s) s where
       then a
       else b
   sFun1 cont arg = do
-    resRef <- newSTRef $ Str ""
+    resRef <- newSTRef Undefined
     cont arg $ return resRef
     readSTRef resRef
   sWhile cond body = do
@@ -209,6 +270,12 @@ f4 =
           (1 :: Int)
           (\one ->
              sWhile
-               (x @>@ (sReadVar l @+@ sReadVar l))
-               (l @=@ (sReadVar l @+@ sReadVar one)) @#
+               (x @>@ sReadVar l @+@ sReadVar l)
+               (l @=@ sReadVar l @+@ sReadVar one) @#
              (res @=@ sReadVar l))
+
+f5 :: MonadJS m s => m Val -> m Val
+f5 =
+  sFun1 $ \x res ->
+    sWithVar "Wow" $ \y ->
+      y @=@ x @+@ return (toVal (20 :: Int)) @# res @=@ f4 (sReadVar y)
