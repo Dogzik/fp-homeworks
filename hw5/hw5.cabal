@@ -18,12 +18,13 @@ tested-with:         GHC == 8.0.1
 
 library
   hs-source-dirs:      src
-  exposed-modules:     Task2 Task4 Task5 Task6 Task7 Task8
+  exposed-modules:     Task1 Task2 Task4 Task5 Task6 Task7 Task8
   ghc-options:         -Wall
   build-depends:       base >= 4.9 && < 5
                      , microlens
                      , directory
                      , filepath
+                     , containers
                      , mtl
   default-language:    Haskell2010
 
@@ -44,6 +45,6 @@ test-suite hw5-test
                      , hspec
                      , QuickCheck
   ghc-options:         -Wall -Werror -threaded -rtsopts -with-rtsopts=-N
-  other-modules:       Block4Spec Block5Spec
+  other-modules:       Block1Spec Block4Spec Block5Spec
   default-language:    Haskell2010
   build-tool-depends:  hspec-discover:hspec-discover
